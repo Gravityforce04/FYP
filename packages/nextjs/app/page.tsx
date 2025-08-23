@@ -37,7 +37,7 @@ const Home: NextPage = () => {
               <TrophyIcon className="h-8 w-8 fill-secondary" />
               <p className="mt-4">
                 View and verify competition results on the{" "}
-                <Link href="/competition" passHref className="link">
+                <Link href="/validation" passHref className="link">
                   Competitions
                 </Link>{" "}
                 page.
