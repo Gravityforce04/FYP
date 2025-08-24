@@ -4,10 +4,8 @@ pragma solidity >=0.8.0 <0.9.0;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 
 contract RoboticsCompetition is ERC721, Ownable {
-    using Counters for Counters.Counter;
     
     struct MatchResult {
         uint256 matchId;
@@ -25,7 +23,7 @@ contract RoboticsCompetition is ERC721, Ownable {
         bool isWinnerNFT;
     }
     
-    Counters.Counter private _tokenIds;
+    uint256 private _tokenIds;
     mapping(uint256 => MatchResult) public matchResults;
     mapping(uint256 => NFTMetadata) public nftMetadata;
     mapping(address => uint256[]) public userNFTs;
@@ -60,8 +58,8 @@ contract RoboticsCompetition is ERC721, Ownable {
         require(result.verified, "Match not verified");
         require(msg.sender == result.winner, "Only winner can mint");
         
-        _tokenIds.increment();
-        uint256 newTokenId = _tokenIds.current();
+        _tokenIds++;
+        uint256 newTokenId = _tokenIds;
         
         _mint(msg.sender, newTokenId);
         
@@ -81,8 +79,8 @@ contract RoboticsCompetition is ERC721, Ownable {
         require(result.verified, "Match not verified");
         require(isParticipant(msg.sender, _matchId), "Not a participant");
         
-        _tokenIds.increment();
-        uint256 newTokenId = _tokenIds.current();
+        _tokenIds++;
+        uint256 newTokenId = _tokenIds;
         
         _mint(msg.sender, newTokenId);
         
