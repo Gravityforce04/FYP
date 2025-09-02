@@ -38,6 +38,7 @@ const config: HardhatUserConfig = {
     ],
   },
   defaultNetwork: "localhost",
+  typechain: { outDir: "typechain-types", target: "ethers-v6" },
   namedAccounts: {
     deployer: {
       // By default, it will take the first Hardhat account as the deployer
