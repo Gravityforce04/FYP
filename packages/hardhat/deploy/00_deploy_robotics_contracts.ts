@@ -21,8 +21,17 @@ const deployRoboticsContracts: DeployFunction = async function (hre: HardhatRunt
     autoMine: true,
   });
 
+  // Deploy NFT contract
+  const nft = await deploy("NFT", {
+    from: deployer,
+    args: [],
+    log: true,
+    autoMine: true,
+  });
+
   console.log("🏆 Robotics Competition deployed to:", roboticsCompetition.address);
   console.log("🛒 NFT Marketplace deployed to:", nftMarketplace.address);
+  console.log("🎫 NFT deployed to:", nft.address);
 };
 
 export default deployRoboticsContracts;
