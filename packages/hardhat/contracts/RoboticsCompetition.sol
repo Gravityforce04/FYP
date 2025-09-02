@@ -31,7 +31,7 @@ contract RoboticsCompetition is Ownable {
         address _winner,
         address[] memory _participants,
         string memory _matchData
-    ) external onlyOwner {
+    ) external {
         require(matchResults[_matchId].matchId == 0, "Match already recorded");
         
         matchResults[_matchId] = MatchResult({

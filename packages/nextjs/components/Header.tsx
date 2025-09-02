@@ -36,6 +36,11 @@ export const menuLinks: HeaderMenuLink[] = [
     href: "/marketplace",
     icon: <ShoppingCartIcon className="h-4 w-4" />,
   },
+  {
+    label: "Matches",
+    href: "/match",
+    icon: <TrophyIcon className="h-4 w-4" />,
+  },
 ];
 
 export const HeaderMenuLinks = () => {

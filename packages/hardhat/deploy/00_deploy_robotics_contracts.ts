@@ -13,10 +13,10 @@ const deployRoboticsContracts: DeployFunction = async function (hre: HardhatRunt
     autoMine: true,
   });
 
-  // Deploy NFT Marketplace contract
-  const nftMarketplace = await deploy("NFTMarketplace", {
+  // Deploy NFT Marketplace contract (note: contract name is "Marketplace" not "NFTMarketplace")
+  const marketplace = await deploy("Marketplace", {
     from: deployer,
-    args: [],
+    args: [5], // 5% fee percentage
     log: true,
     autoMine: true,
   });
@@ -30,7 +30,7 @@ const deployRoboticsContracts: DeployFunction = async function (hre: HardhatRunt
   });
 
   console.log("🏆 Robotics Competition deployed to:", roboticsCompetition.address);
-  console.log("🛒 NFT Marketplace deployed to:", nftMarketplace.address);
+  console.log("🛒 NFT Marketplace deployed to:", marketplace.address);
   console.log("🎫 NFT deployed to:", nft.address);
 };
 

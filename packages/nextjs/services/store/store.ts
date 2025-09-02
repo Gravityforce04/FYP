@@ -22,6 +22,25 @@ type GlobalState = {
   setTargetNetwork: (newTargetNetwork: ChainWithAttributes) => void;
 };
 
+// Helper function to get network from localStorage or default to first network
+const getInitialNetwork = (): ChainWithAttributes => {
+  if (typeof window !== "undefined") {
+    const savedNetworkId = localStorage.getItem("scaffold-eth-target-network");
+    if (savedNetworkId) {
+      const savedNetwork = scaffoldConfig.targetNetworks.find(network => network.id === parseInt(savedNetworkId));
+      if (savedNetwork) {
+        return { ...savedNetwork, ...NETWORKS_EXTRA_DATA[savedNetwork.id] };
+      }
+    }
+  }
+
+  // Default to first network (hardhat)
+  return {
+    ...scaffoldConfig.targetNetworks[0],
+    ...NETWORKS_EXTRA_DATA[scaffoldConfig.targetNetworks[0].id],
+  };
+};
+
 export const useGlobalState = create<GlobalState>(set => ({
   nativeCurrency: {
     price: 0,
@@ -31,9 +50,12 @@ export const useGlobalState = create<GlobalState>(set => ({
     set(state => ({ nativeCurrency: { ...state.nativeCurrency, price: newValue } })),
   setIsNativeCurrencyFetching: (newValue: boolean): void =>
     set(state => ({ nativeCurrency: { ...state.nativeCurrency, isFetching: newValue } })),
-  targetNetwork: {
-    ...scaffoldConfig.targetNetworks[0],
-    ...NETWORKS_EXTRA_DATA[scaffoldConfig.targetNetworks[0].id],
+  targetNetwork: getInitialNetwork(),
+  setTargetNetwork: (newTargetNetwork: ChainWithAttributes) => {
+    // Save to localStorage for persistence
+    if (typeof window !== "undefined") {
+      localStorage.setItem("scaffold-eth-target-network", newTargetNetwork.id.toString());
+    }
+    set(() => ({ targetNetwork: newTargetNetwork }));
   },
-  setTargetNetwork: (newTargetNetwork: ChainWithAttributes) => set(() => ({ targetNetwork: newTargetNetwork })),
 }));

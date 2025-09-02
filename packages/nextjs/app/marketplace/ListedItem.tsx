@@ -55,7 +55,7 @@ export default function MyListedItems() {
 
   // Use Scaffold-ETH hooks for contract interactions
   const { data: itemCount } = useScaffoldReadContract({
-    contractName: "NFTMarketplace",
+    contractName: "Marketplace",
     functionName: "itemCount",
   });
 

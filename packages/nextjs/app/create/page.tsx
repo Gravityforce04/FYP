@@ -1,11 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { parseEther } from "viem";
 import { Address } from "~~/components/scaffold-eth";
-// import { parseEther } from 'viem';
-// import { useScaffoldWriteContract} from '~~/hooks/scaffold-eth';
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
+
+interface CreatedNFT {
+  transactionHash: string;
+  name: string;
+  price: string;
+  description: string;
+  image: string;
+  matchId: string;
+  tokenId: number;
+  timestamp: number;
+}
 
 const Create = () => {
   const [image, setImage] = useState("");
@@ -15,21 +25,34 @@ const Create = () => {
   const [matchId, setMatchId] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [mintedTokenId, setMintedTokenId] = useState<number | null>(null);
+  const [createdNFTs, setCreatedNFTs] = useState<CreatedNFT[]>([]);
+  const [lastTransactionHash, setLastTransactionHash] = useState<string>("");
+
+  // Get deployed contract info
+  const { data: nftContractInfo } = useDeployedContractInfo({ contractName: "NFT" });
+  const { data: marketplaceContractInfo } = useDeployedContractInfo({ contractName: "Marketplace" });
 
   // Use Scaffold-ETH hooks for contract interactions
-  // const { writeContractAsync: writeRoboticsContract } = useScaffoldWriteContract({
-  //   contractName: "RoboticsCompetition"
-  // });
+  const { writeContractAsync: writeNFTContract } = useScaffoldWriteContract({
+    contractName: "NFT",
+  });
 
-  // const { writeContractAsync: writeMarketplaceContract } = useScaffoldWriteContract({
-  //   contractName: "NFTMarketplace"
-  // });
+  const { writeContractAsync: writeMarketplaceContract } = useScaffoldWriteContract({
+    contractName: "Marketplace",
+  });
 
   // Read match result to verify it exists
   const { data: matchResult } = useScaffoldReadContract({
     contractName: "RoboticsCompetition",
     functionName: "getMatchResult",
     args: [matchId ? BigInt(matchId) : BigInt(0)],
+  });
+
+  // Read NFT contract to get token count for proper token ID
+  const { data: tokenCount } = useScaffoldReadContract({
+    contractName: "NFT",
+    functionName: "tokenCount",
   });
 
   const uploadToIPFS = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,61 +90,91 @@ const Create = () => {
       return;
     }
 
+    if (!nftContractInfo?.address || !marketplaceContractInfo?.address) {
+      notification.error("Contract addresses not found. Please check deployment.");
+      return;
+    }
+
+    // Check if user is the winner or participant
+    const isWinner = matchResult.winner.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase();
+    const isParticipant = matchResult.participants.some(
+      participant => participant.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase(),
+    );
+
+    if (!isWinner && !isParticipant) {
+      notification.error("You can only mint NFTs for matches you participated in");
+      return;
+    }
+
     setIsCreating(true);
 
     try {
-      //Create metadata JSON
-      // const metadata = {
-      //   image,
-      //   price: parseFloat(price),
-      //   name,
-      //   description,
-      //   matchId: parseInt(matchId),
-      //   attributes: [
-      //     { trait_type: "Type", value: "Robotics Competition NFT" },
-      //     { trait_type: "Category", value: "eSports" },
-      //     { trait_type: "Match ID", value: matchId },
-      //     { trait_type: "Winner", value: matchResult.winner },
-      //     { trait_type: "Timestamp", value: new Date(Number(matchResult.timestamp) * 1000).toISOString() }
-      //   ]
-      // };
-
       // Mock IPFS upload for metadata
-      // const mockMetadataHash = `QmMetadataHash${Date.now()}`;
-      // const metadataUri = `https://ipfs.infura.io/ipfs/${mockMetadataHash}`;
+      const mockMetadataHash = `QmMetadataHash${Date.now()}`;
+      const metadataUri = `https://ipfs.infura.io/ipfs/${mockMetadataHash}`;
 
-      // Check if user is the winner or participant
-      // const isWinner = matchResult.winner.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase();
-      // const isParticipant = matchResult.participants.some(
-      //   participant => participant.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase()
-      // );
+      // Get current token count to predict the new token ID
+      const currentTokenCount = tokenCount ? Number(tokenCount) : 0;
+      const expectedTokenId = currentTokenCount + 1;
 
-      // if (!isWinner && !isParticipant) {
-      //   notification.error("You can only mint NFTs for matches you participated in");
-      //   return;
-      // }
+      // Mint NFT using the NFT contract
+      const tx = await writeNFTContract({
+        functionName: "mint",
+        args: [metadataUri],
+      });
 
-      // Mint NFT using the appropriate function
-      // if (isWinner) {
-      //   await writeRoboticsContract({
-      //     functionName: "mintWinnerNFT",
-      //     args: [BigInt(matchId)],
-      //   });
-      //   notification.success("Winner NFT minted successfully!");
-      // } else {
-      //   await writeRoboticsContract({
-      //     functionName: "mintParticipantNFT",
-      //     args: [BigInt(matchId)],
-      //   });
-      //   notification.success("Participant NFT minted successfully!");
-      // }
+      if (tx && typeof tx === "object" && "hash" in tx) {
+        const transactionHash = (tx as any).hash;
+        setLastTransactionHash(transactionHash);
 
-      // Reset form
-      setImage("");
-      setPrice("");
-      setName("");
-      setDescription("");
-      setMatchId("");
+        notification.success("NFT minted successfully! Now listing on marketplace...");
+
+        // Use the expected token ID based on current token count
+        const tokenId = expectedTokenId;
+        setMintedTokenId(tokenId);
+
+        // Create NFT record
+        const newNFT: CreatedNFT = {
+          transactionHash,
+          name,
+          price,
+          description,
+          image,
+          matchId,
+          tokenId,
+          timestamp: Date.now(),
+        };
+
+        // Add to created NFTs list
+        setCreatedNFTs(prev => [newNFT, ...prev]);
+
+        // List the NFT on the marketplace using correct contract addresses
+        try {
+          await writeMarketplaceContract({
+            functionName: "makeItem",
+            args: [
+              nftContractInfo.address, // Use actual NFT contract address
+              BigInt(tokenId),
+              parseEther(price),
+            ],
+          });
+
+          notification.success("NFT listed on marketplace successfully!");
+        } catch (marketplaceError) {
+          console.log("Marketplace listing error: ", marketplaceError);
+          notification.warning("NFT minted but failed to list on marketplace. You can list it manually later.");
+        }
+
+        // Reset form
+        setImage("");
+        setPrice("");
+        setName("");
+        setDescription("");
+        setMatchId("");
+        setMintedTokenId(null);
+      } else {
+        notification.error("NFT minting failed - no transaction hash returned");
+      }
     } catch (error) {
       console.log("NFT creation error: ", error);
       notification.error("Failed to create NFT. Check console for details.");
@@ -130,12 +183,50 @@ const Create = () => {
     }
   };
 
+  // Format timestamp
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString();
+  };
+
+  // Format transaction hash for display
+  const formatTransactionHash = (hash: string) => {
+    return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-bold text-center mb-8">🎨 Create & Mint NFT</h1>
 
-        <div className="card bg-base-100 shadow-xl">
+        {/* Success Message */}
+        {mintedTokenId && (
+          <div className="alert alert-success mb-6">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="stroke-current shrink-0 h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div>
+              <h3 className="font-bold">NFT Minted Successfully!</h3>
+              <div className="text-xs">Token ID: {mintedTokenId}</div>
+              {lastTransactionHash && (
+                <div className="text-xs mt-1">
+                  Transaction Hash: <span className="font-mono">{formatTransactionHash(lastTransactionHash)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="card bg-base-100 shadow-xl mb-6">
           <div className="card-body">
             <div className="space-y-6">
               {/* Match ID Input */}
@@ -153,18 +244,19 @@ const Create = () => {
                 />
                 {matchId && matchResult && (
                   <div className="mt-2 p-3 bg-base-200 rounded-lg">
-                    <p className="text-sm">
+                    <div className="text-sm">
                       <strong>Match #{matchId}</strong>
-                    </p>
-                    <p className="text-sm">
+                    </div>
+                    <div className="text-sm">
                       Winner: <Address address={matchResult.winner} />
-                    </p>
-                    <p className="text-sm">Status: {matchResult.verified ? "✅ Verified" : "❌ Not Verified"}</p>
+                    </div>
+                    <div className="text-sm">Status: {matchResult.verified ? "✅ Verified" : "❌ Not Verified"}</div>
+                    <div className="text-sm">Participants: {matchResult.participants.length}</div>
                   </div>
                 )}
                 {matchId && !matchResult && (
                   <div className="mt-2 p-3 bg-warning rounded-lg">
-                    <p className="text-sm text-warning-content">Match not found. Please check the Match ID.</p>
+                    <div className="text-sm text-warning-content">Match not found. Please check the Match ID.</div>
                   </div>
                 )}
               </div>
@@ -256,6 +348,50 @@ const Create = () => {
           </div>
         </div>
 
+        {/* Created NFTs List */}
+        {createdNFTs.length > 0 && (
+          <div className="card bg-base-100 shadow-xl mb-6">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-4">Created NFTs</h2>
+              <div className="overflow-x-auto">
+                <table className="table table-zebra w-full">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Price</th>
+                      <th>Match ID</th>
+                      <th>Token ID</th>
+                      <th>Transaction Hash</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {createdNFTs.map((nft, index) => (
+                      <tr key={index}>
+                        <td className="font-medium">{nft.name}</td>
+                        <td className="font-mono">{nft.price} ETH</td>
+                        <td className="font-mono">{nft.matchId}</td>
+                        <td className="font-mono">{nft.tokenId}</td>
+                        <td className="font-mono text-xs">
+                          <a
+                            href={`/blockexplorer/transaction/${nft.transactionHash}`}
+                            className="link link-primary hover:underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {formatTransactionHash(nft.transactionHash)}
+                          </a>
+                        </td>
+                        <td className="text-xs">{formatTimestamp(nft.timestamp)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Information Cards */}
         <div className="grid md:grid-cols-3 gap-6 mt-12">
           <div className="card bg-base-100 shadow-lg">
@@ -285,7 +421,7 @@ const Create = () => {
 
         {/* Instructions */}
         <div className="mt-8 p-6 bg-base-200 rounded-lg">
-          <h3 className="text-xl font-semibold mb-4">👉 How to Create Your NFT</h3>
+          <h3 className="text-xl font-semibold mb-4">�� How to Create Your NFT</h3>
           <ol className="list-decimal list-inside space-y-2 text-sm">
             <li>
               <strong>Verify Match ID:</strong> Enter a Match ID you participated in. Only verified matches are
@@ -301,7 +437,7 @@ const Create = () => {
               <strong>Mint NFT:</strong> Click the button to mint your NFT on the blockchain.
             </li>
             <li>
-              <strong>List on Marketplace:</strong> After minting, you can list your NFT for sale.
+              <strong>List on Marketplace:</strong> After minting, your NFT will be automatically listed for sale.
             </li>
           </ol>
         </div>
