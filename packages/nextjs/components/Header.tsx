@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { hardhat } from "viem/chains";
-import { Bars3Icon, BugAntIcon } from "@heroicons/react/24/outline";
+import { Bars3Icon, PlusCircleIcon, ShoppingCartIcon, TrophyIcon } from "@heroicons/react/24/outline";
 import { FaucetButton, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
+import { NetworkOptions } from "~~/components/scaffold-eth/RainbowKitCustomConnectButton/NetworkOptions";
 import { useOutsideClick, useTargetNetwork } from "~~/hooks/scaffold-eth";
 
 type HeaderMenuLink = {
@@ -21,9 +22,19 @@ export const menuLinks: HeaderMenuLink[] = [
     href: "/",
   },
   {
-    label: "Debug Contracts",
-    href: "/debug",
-    icon: <BugAntIcon className="h-4 w-4" />,
+    label: "Validation",
+    href: "/validation",
+    icon: <TrophyIcon className="h-4 w-4" />,
+  },
+  {
+    label: "Create NFT",
+    href: "/create",
+    icon: <PlusCircleIcon className="h-4 w-4" />,
+  },
+  {
+    label: "Marketplace",
+    href: "/marketplace",
+    icon: <ShoppingCartIcon className="h-4 w-4" />,
   },
 ];
 
@@ -86,8 +97,8 @@ export const Header = () => {
             <Image alt="SE2 logo" className="cursor-pointer" fill src="/logo.svg" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold leading-tight">Scaffold-ETH</span>
-            <span className="text-xs">Ethereum dev stack</span>
+            <span className="font-bold leading-tight">Robotics eSports</span>
+            <span className="text-xs">Transparent Results • NFT Rewards</span>
           </div>
         </Link>
         <ul className="hidden lg:flex lg:flex-nowrap menu menu-horizontal px-1 gap-2">
@@ -95,6 +106,13 @@ export const Header = () => {
         </ul>
       </div>
       <div className="navbar-end grow mr-4">
+        {/* Network switch pill */}
+        <details className="dropdown dropdown-end hidden md:block mr-2">
+          <summary className="btn btn-sm btn-outline rounded-full px-3">{targetNetwork.name}</summary>
+          <ul className="menu dropdown-content mt-2 p-2 shadow bg-base-100 rounded-box w-56">
+            <NetworkOptions />
+          </ul>
+        </details>
         <RainbowKitCustomConnectButton />
         {isLocalNetwork && <FaucetButton />}
       </div>
