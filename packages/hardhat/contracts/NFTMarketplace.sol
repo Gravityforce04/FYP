@@ -21,12 +21,15 @@ contract Marketplace is ReentrancyGuard {
         uint price;
         address payable seller;
         bool sold;
+        bool listed; // Track if item is listed
     }
 
     // itemId -> Item
     mapping(uint => Item) public items;
+    // seller -> itemIds[]
+    mapping(address => uint[]) public sellerItems;
 
-    event Offered(
+    event Listed(
         uint itemId,
         address indexed nft,
         uint tokenId,
@@ -43,29 +46,38 @@ contract Marketplace is ReentrancyGuard {
         address indexed buyer
     );
 
+    event Unlisted(
+        uint itemId,
+        address indexed nft,
+        uint tokenId,
+        address indexed seller
+    );
+
     constructor(uint _feePercent) {
         feeAccount = payable(msg.sender);
         feePercent = _feePercent;
     }
 
-    // Make item to offer on the marketplace
-    function makeItem(IERC721 _nft, uint _tokenId, uint _price) external nonReentrant {
+    // List NFT without transferring (keeps NFT in wallet)
+    function listNFT(IERC721 _nft, uint _tokenId, uint _price) external {
         require(_price > 0, "Price must be greater than zero");
-        // increment itemCount
-        itemCount ++;
-        // transfer nft
-        _nft.transferFrom(msg.sender, address(this), _tokenId);
-        // add new item to items mapping
-        items[itemCount] = Item (
+        require(_nft.ownerOf(_tokenId) == msg.sender, "You don't own this NFT");
+        
+        itemCount++;
+        
+        items[itemCount] = Item(
             itemCount,
             _nft,
             _tokenId,
             _price,
             payable(msg.sender),
-            false
+            false,
+            true
         );
-        // emit Offered event
-        emit Offered(
+        
+        sellerItems[msg.sender].push(itemCount);
+        
+        emit Listed(
             itemCount,
             address(_nft),
             _tokenId,
@@ -74,20 +86,43 @@ contract Marketplace is ReentrancyGuard {
         );
     }
 
-    function purchaseItem(uint _itemId) external payable nonReentrant {
-        uint _totalPrice = getTotalPrice(_itemId);
+    // Unlist NFT
+    function unlistNFT(uint _itemId) external {
         Item storage item = items[_itemId];
-        require(_itemId > 0 && _itemId <= itemCount, "item doesn't exist");
-        require(msg.value >= _totalPrice, "not enough ether to cover item price and market fee");
-        require(!item.sold, "item already sold");
-        // pay seller and feeAccount
+        require(item.seller == msg.sender, "Not your item");
+        require(item.listed && !item.sold, "Item not listed or already sold");
+        
+        item.listed = false;
+        
+        emit Unlisted(
+            _itemId,
+            address(item.nft),
+            item.tokenId,
+            msg.sender
+        );
+    }
+
+    // Purchase listed NFT
+    function purchaseNFT(uint _itemId) external payable nonReentrant {
+        Item storage item = items[_itemId];
+        require(_itemId > 0 && _itemId <= itemCount, "Item doesn't exist");
+        require(item.listed && !item.sold, "Item not listed or already sold");
+        require(msg.value >= item.price, "Insufficient payment");
+        
+        uint totalPrice = getTotalPrice(_itemId);
+        require(msg.value >= totalPrice, "Insufficient payment for price + fees");
+        
+        // Transfer NFT from seller to buyer
+        item.nft.transferFrom(item.seller, msg.sender, item.tokenId);
+        
+        // Pay seller and fees
         item.seller.transfer(item.price);
-        feeAccount.transfer(_totalPrice - item.price);
-        // update item to sold
+        feeAccount.transfer(totalPrice - item.price);
+        
+        // Update item status
         item.sold = true;
-        // transfer nft to buyer
-        item.nft.transferFrom(address(this), msg.sender, item.tokenId);
-        // emit Bought event
+        item.listed = false;
+        
         emit Bought(
             _itemId,
             address(item.nft),
@@ -97,7 +132,33 @@ contract Marketplace is ReentrancyGuard {
             msg.sender
         );
     }
-    function getTotalPrice(uint _itemId) view public returns(uint){
-        return((items[_itemId].price*(100 + feePercent))/100);
+
+    // Get items listed by a specific seller
+    function getSellerItems(address _seller) external view returns (uint[] memory) {
+        return sellerItems[_seller];
+    }
+
+    // Get all listed items
+    function getAllListedItems() external view returns (uint[] memory) {
+        uint[] memory listedItems = new uint[](itemCount);
+        uint count = 0;
+        
+        for (uint i = 1; i <= itemCount; i++) {
+            if (items[i].listed && !items[i].sold) {
+                listedItems[count] = i;
+                count++;
+            }
+        }
+        
+        // Resize array to actual count
+        assembly {
+            mstore(listedItems, count)
+        }
+        
+        return listedItems;
+    }
+
+    function getTotalPrice(uint _itemId) view public returns(uint) {
+        return ((items[_itemId].price * (100 + feePercent)) / 100);
     }
 }

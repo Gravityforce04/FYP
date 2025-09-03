@@ -102,7 +102,38 @@ const deployedContracts = {
               type: "address",
             },
           ],
-          name: "Offered",
+          name: "Listed",
+          type: "event",
+        },
+        {
+          anonymous: false,
+          inputs: [
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "itemId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "nft",
+              type: "address",
+            },
+            {
+              indexed: false,
+              internalType: "uint256",
+              name: "tokenId",
+              type: "uint256",
+            },
+            {
+              indexed: true,
+              internalType: "address",
+              name: "seller",
+              type: "address",
+            },
+          ],
+          name: "Unlisted",
           type: "event",
         },
         {
@@ -126,6 +157,38 @@ const deployedContracts = {
               internalType: "uint256",
               name: "",
               type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "getAllListedItems",
+          outputs: [
+            {
+              internalType: "uint256[]",
+              name: "",
+              type: "uint256[]",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "_seller",
+              type: "address",
+            },
+          ],
+          name: "getSellerItems",
+          outputs: [
+            {
+              internalType: "uint256[]",
+              name: "",
+              type: "uint256[]",
             },
           ],
           stateMutability: "view",
@@ -203,6 +266,11 @@ const deployedContracts = {
               name: "sold",
               type: "bool",
             },
+            {
+              internalType: "bool",
+              name: "listed",
+              type: "bool",
+            },
           ],
           stateMutability: "view",
           type: "function",
@@ -225,7 +293,7 @@ const deployedContracts = {
               type: "uint256",
             },
           ],
-          name: "makeItem",
+          name: "listNFT",
           outputs: [],
           stateMutability: "nonpayable",
           type: "function",
@@ -238,9 +306,46 @@ const deployedContracts = {
               type: "uint256",
             },
           ],
-          name: "purchaseItem",
+          name: "purchaseNFT",
           outputs: [],
           stateMutability: "payable",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "address",
+              name: "",
+              type: "address",
+            },
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          name: "sellerItems",
+          outputs: [
+            {
+              internalType: "uint256",
+              name: "",
+              type: "uint256",
+            },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            {
+              internalType: "uint256",
+              name: "_itemId",
+              type: "uint256",
+            },
+          ],
+          name: "unlistNFT",
+          outputs: [],
+          stateMutability: "nonpayable",
           type: "function",
         },
       ],

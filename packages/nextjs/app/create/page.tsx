@@ -208,7 +208,12 @@ const Create = () => {
       // Always proceed if we have a transaction response (even if it's just the hash)
       if (tx) {
         setLastTransactionHash(transactionHash);
-        notification.success("NFT minted successfully! Now listing on marketplace...");
+        const notificationId = notification.success(
+          `NFT minted successfully! Transaction: ${transactionHash.slice(0, 6)}...${transactionHash.slice(-4)}`,
+        );
+        setTimeout(() => {
+          notification.remove(notificationId);
+        }, 5000);
 
         // Use the expected token ID based on current token count
         const tokenId = expectedTokenId;
@@ -235,44 +240,8 @@ const Create = () => {
           loadExistingNFTs();
         }, 2000);
 
-        // First approve the marketplace to transfer the NFT
-        try {
-          console.log("Approving marketplace to transfer NFT...");
-          await writeNFTContract({
-            functionName: "approve",
-            args: [
-              marketplaceContractInfo.address, // Approve marketplace contract
-              BigInt(tokenId), // Token ID to approve
-            ],
-          });
-          notification.success("NFT approved for marketplace transfer!");
-
-          // Wait a moment for approval to be processed
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          // Now list the NFT on the marketplace
-          console.log("Listing NFT on marketplace...");
-          await writeMarketplaceContract({
-            functionName: "makeItem",
-            args: [
-              nftContractInfo.address, // Use actual NFT contract address
-              BigInt(tokenId),
-              parseEther(price),
-            ],
-          });
-
-          notification.success("NFT listed on marketplace successfully!");
-        } catch (marketplaceError) {
-          console.log("Marketplace listing error: ", marketplaceError);
-          console.log("Error details:", {
-            nftContract: nftContractInfo.address,
-            marketplaceContract: marketplaceContractInfo.address,
-            tokenId,
-            price,
-            error: marketplaceError,
-          });
-          notification.warning("NFT minted but failed to list on marketplace. Check console for details.");
-        }
+        // Remove the automatic marketplace listing - NFT stays in wallet
+        // notification.success("NFT minted successfully! NFT is now in your wallet.");
 
         // Reset form
         setImage("");
@@ -342,7 +311,7 @@ const Create = () => {
       // List on marketplace
       console.log("Listing NFT on marketplace...");
       await writeMarketplaceContract({
-        functionName: "makeItem",
+        functionName: "listNFT", // Changed from "makeItem" to "listNFT"
         args: [nftContractInfo.address, BigInt(tokenId), parseEther(price)],
       });
 
