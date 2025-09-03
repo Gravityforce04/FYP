@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useBalance } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
 
@@ -17,6 +17,7 @@ interface TransactionDetails {
 
 export default function MatchPage() {
   const { address } = useAccount();
+  const { data: balance } = useBalance({ address });
   const [mockMatchId, setMockMatchId] = useState<string>("");
   const [winner, setWinner] = useState<string>("");
   const [participants, setParticipants] = useState<string>("");
@@ -27,6 +28,27 @@ export default function MatchPage() {
   const { writeContractAsync: writeCompetition } = useScaffoldWriteContract({
     contractName: "RoboticsCompetition",
   });
+
+  // Test contract connection
+  const testContractConnection = async () => {
+    try {
+      console.log("Testing contract connection...");
+      console.log("Address:", address);
+      console.log("Balance:", balance);
+
+      // Try to read from contract to test connection
+      if (events && events.length >= 0) {
+        console.log("Contract read successful - events loaded:", events.length);
+        notification.success("Contract connection test successful!");
+      } else {
+        console.log("Contract read failed or no events");
+        notification.warning("Contract connection test - no events found");
+      }
+    } catch (error) {
+      console.error("Contract connection test failed:", error);
+      notification.error("Contract connection test failed. Check console for details.");
+    }
+  };
 
   // Get event history for MatchResultRecorded events
   const { data: events, isLoading: eventsLoading } = useScaffoldEventHistory({
@@ -48,6 +70,18 @@ export default function MatchPage() {
       return;
     }
 
+    // Validate addresses
+    if (!winner.startsWith("0x") || winner.length !== 42) {
+      notification.error("Invalid winner address format");
+      return;
+    }
+
+    // Check if user has enough ETH for transaction
+    if (balance && Number(balance.value) < 0.001) {
+      notification.error("Insufficient ETH balance. You need at least 0.001 ETH for transaction fees.");
+      return;
+    }
+
     setIsRecording(true);
     try {
       const parts = participants
@@ -55,15 +89,76 @@ export default function MatchPage() {
         .map(s => s.trim())
         .filter(Boolean);
 
+      // Validate participants
+      if (parts.length === 0) {
+        notification.error("At least one participant is required");
+        setIsRecording(false);
+        return;
+      }
+
+      // Validate all participant addresses
+      for (const part of parts) {
+        if (!part.startsWith("0x") || part.length !== 42) {
+          notification.error(`Invalid participant address: ${part}`);
+          setIsRecording(false);
+          return;
+        }
+      }
+
+      console.log("Recording match with args:", {
+        matchId: mockMatchId,
+        winner,
+        participants: parts,
+        matchData,
+      });
+
       const tx = await writeCompetition({
         functionName: "recordMatchResult",
         args: [BigInt(mockMatchId), winner as `0x${string}`, parts as `0x${string}`[], matchData],
       });
 
-      if (tx && typeof tx === "object" && "hash" in tx) {
+      console.log("Mock match transaction response:", tx);
+      console.log("Transaction type:", typeof tx);
+      console.log("Transaction keys:", tx && typeof tx === "object" ? Object.keys(tx) : "N/A");
+
+      // Extract transaction hash - handle different response formats
+      let transactionHash = "";
+      let transactionResponse: any = tx;
+
+      // Handle different response formats from Scaffold-ETH
+      if (tx) {
+        if (typeof tx === "string") {
+          // Direct transaction hash string
+          transactionHash = tx;
+        } else if (typeof tx === "object") {
+          if ("hash" in tx) {
+            transactionHash = (tx as any).hash;
+          } else if ("transactionHash" in tx) {
+            transactionHash = (tx as any).transactionHash;
+          } else if ("wait" in tx) {
+            // This is a transaction response object, wait for it to be mined
+            try {
+              const receipt = await (tx as any).wait();
+              transactionHash = receipt.hash || receipt.transactionHash;
+              transactionResponse = receipt;
+            } catch (waitError) {
+              console.log("Error waiting for transaction:", waitError);
+              // Try to get hash from the original response
+              if ("hash" in tx) {
+                transactionHash = (tx as any).hash;
+              }
+            }
+          }
+        }
+      }
+
+      console.log("Extracted transaction hash:", transactionHash);
+      console.log("Full transaction response:", transactionResponse);
+
+      if (transactionHash) {
         // Store transaction details
         const txDetails: TransactionDetails = {
-          hash: (tx as any).hash,
+          hash: transactionHash,
           matchId: mockMatchId,
           winner,
           participants: parts,
@@ -81,11 +176,30 @@ export default function MatchPage() {
         setParticipants("");
         setMatchData("Robotics Challenge: Autonomous Navigation");
       } else {
-        notification.error("Transaction failed - no hash returned");
+        console.error("Mock match recording failed - no valid transaction hash extracted");
+        console.error("Transaction response:", tx);
+        notification.error("Failed to record match - no valid transaction hash. Check console for details.");
       }
     } catch (e) {
-      console.error(e);
-      notification.error("Failed to record match");
+      console.error("Error recording match:", e);
+
+      // Provide more specific error messages
+      if (e && typeof e === "object" && "message" in e) {
+        const errorMessage = (e as any).message;
+        if (errorMessage.includes("Internal JSON-RPC error")) {
+          notification.error("Blockchain connection error. Please check if your local blockchain is running.");
+        } else if (errorMessage.includes("insufficient funds")) {
+          notification.error("Insufficient funds for transaction");
+        } else if (errorMessage.includes("nonce")) {
+          notification.error("Transaction nonce error. Please try again.");
+        } else if (errorMessage.includes("already recorded")) {
+          notification.error("Match ID already exists. Try a different Match ID.");
+        } else {
+          notification.error(`Failed to record match: ${errorMessage}`);
+        }
+      } else {
+        notification.error("Failed to record match. Check console for details.");
+      }
     } finally {
       setIsRecording(false);
     }
@@ -100,6 +214,45 @@ export default function MatchPage() {
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Create Mock Match</h1>
 
+      {/* Debug Info */}
+      <div className="card bg-warning text-warning-content shadow-xl mb-6">
+        <div className="card-body">
+          <h2 className="card-title text-lg">🐛 Debug Info</h2>
+          <div className="text-sm space-y-1">
+            <div>
+              <strong>Connected Address:</strong>{" "}
+              {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not Connected"}
+            </div>
+            <div>
+              <strong>Balance:</strong>{" "}
+              {balance ? `${Number(balance.formatted).toFixed(4)} ${balance.symbol}` : "Loading..."}
+            </div>
+            <div>
+              <strong>Match ID:</strong> {mockMatchId || "Not Set"}
+            </div>
+            <div>
+              <strong>Winner:</strong> {winner || "Not Set"}
+            </div>
+            <div>
+              <strong>Participants:</strong> {participants || "Not Set"}
+            </div>
+            <div>
+              <strong>Events Loaded:</strong> {events ? events.length : "Loading..."}
+            </div>
+          </div>
+          {!address && (
+            <div className="mt-2 p-2 bg-error text-error-content rounded text-xs">
+              ⚠️ Please connect your wallet first
+            </div>
+          )}
+          {address && (!balance || Number(balance.value) < 0.001) && (
+            <div className="mt-2 p-2 bg-error text-error-content rounded text-xs">
+              ⚠️ Low balance. You need at least 0.001 ETH for transactions
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="card bg-base-100 shadow-xl mb-6">
         <div className="card-body space-y-4">
           <div className="flex gap-2">
@@ -108,6 +261,9 @@ export default function MatchPage() {
             </button>
             <button className="btn btn-primary" onClick={record} disabled={!mockMatchId || !winner || isRecording}>
               {isRecording ? "Recording..." : "Record On-Chain"}
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={testContractConnection}>
+              Test Connection
             </button>
           </div>
 

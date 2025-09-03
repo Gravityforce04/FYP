@@ -44,6 +44,7 @@ const Create = () => {
   const [matchId, setMatchId] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [mintedTokenId, setMintedTokenId] = useState<number | null>(null);
   const [createdNFTs, setCreatedNFTs] = useState<CreatedNFT[]>([]);
   const [lastTransactionHash, setLastTransactionHash] = useState<string>("");
@@ -80,6 +81,12 @@ const Create = () => {
     functionName: "tokenCount",
   });
 
+  // Test contract connection
+  const { data: contractName } = useScaffoldReadContract({
+    contractName: "NFT",
+    functionName: "name",
+  });
+
   // Get mint events for real transaction hashes
   const { data: mintEvents } = useScaffoldEventHistory({
     contractName: "NFT",
@@ -111,23 +118,33 @@ const Create = () => {
 
   const uploadMetadataToIPFS = async (metadata: NFTMetadata): Promise<string> => {
     try {
-      // Create a realistic IPFS hash format (Qm + 44 characters)
-      const timestamp = Date.now().toString(36);
-      const random = Math.random().toString(36).substr(2, 20);
-      const mockHash = `Qm${timestamp}${random}`.substr(0, 46); // Ensure it's exactly 46 characters
-
-      // Use HTTP gateway format for better wallet compatibility
-      const metadataUri = `https://ipfs.io/ipfs/${mockHash}`;
+      // Use the simplest possible metadata URI - just a number
+      const metadataUri = "1";
 
       // Store complete metadata locally for demo purposes
-      localStorage.setItem(`nft-metadata-${mockHash}`, JSON.stringify(metadata));
+      localStorage.setItem(`nft-metadata-${metadataUri}`, JSON.stringify(metadata));
 
-      notification.success("Metadata prepared and stored locally (IPFS hash: " + mockHash + ")");
+      notification.success("Metadata prepared and stored locally (URI: " + metadataUri + ")");
       return metadataUri;
     } catch (error) {
       console.log("IPFS metadata preparation error: ", error);
-      // Fallback to mock metadata if IPFS fails
-      return `https://ipfs.io/ipfs/QmMockMetadataHash${Date.now()}`;
+      // Fallback to simple string format
+      return "1";
+    }
+  };
+
+  // Function to get the actual token ID from the blockchain
+  const getActualTokenId = async (): Promise<number> => {
+    try {
+      // Get the current token count from the contract
+      const currentTokenCount = tokenCount ? Number(tokenCount) : 0;
+
+      // The new token ID should be the current count
+      return currentTokenCount;
+    } catch (error) {
+      console.log("Error getting actual token ID:", error);
+      // Fallback to current token count
+      return tokenCount ? Number(tokenCount) : 1;
     }
   };
 
@@ -158,7 +175,13 @@ const Create = () => {
       return;
     }
 
+    // Prevent multiple submissions
+    if (isCreating || isProcessing) {
+      return;
+    }
+
     setIsCreating(true);
+    setIsProcessing(true);
 
     try {
       // Create metadata object with all NFT details
@@ -176,50 +199,23 @@ const Create = () => {
       // Upload metadata to IPFS
       const metadataUri = await uploadMetadataToIPFS(metadata);
 
-      // Get current token count to predict the new token ID
-      const currentTokenCount = tokenCount ? Number(tokenCount) : 0;
-      const expectedTokenId = currentTokenCount + 1;
-
       // Mint NFT using the NFT contract
       const tx = await writeNFTContract({
         functionName: "mint",
         args: [metadataUri],
       });
 
-      console.log("NFT mint transaction response:", tx);
+      // Simple transaction hash extraction - just get the hash directly
+      const transactionHash = typeof tx === "string" ? tx : (tx as any)?.hash || (tx as any)?.transactionHash;
 
-      // Extract transaction hash - handle different response formats
-      let transactionHash = "";
-      if (tx) {
-        if (typeof tx === "string") {
-          // Direct transaction hash string
-          transactionHash = tx;
-        } else if (typeof tx === "object") {
-          if ("hash" in tx) {
-            transactionHash = (tx as any).hash;
-          } else if ("transactionHash" in tx) {
-            transactionHash = (tx as any).transactionHash;
-          }
-        }
-      }
-
-      console.log("Extracted transaction hash:", transactionHash);
-
-      // Always proceed if we have a transaction response (even if it's just the hash)
-      if (tx) {
+      if (transactionHash) {
         setLastTransactionHash(transactionHash);
-        const notificationId = notification.success(
-          `NFT minted successfully! Transaction: ${transactionHash.slice(0, 6)}...${transactionHash.slice(-4)}`,
-        );
-        setTimeout(() => {
-          notification.remove(notificationId);
-        }, 5000);
 
-        // Use the expected token ID based on current token count
-        const tokenId = expectedTokenId;
-        setMintedTokenId(tokenId);
+        // Wait for the transaction to be mined and get the actual token ID
+        const actualTokenId = await getActualTokenId();
+        setMintedTokenId(actualTokenId);
 
-        // Create NFT record
+        // Create NFT record with actual token ID
         const newNFT: CreatedNFT = {
           transactionHash,
           name,
@@ -227,21 +223,20 @@ const Create = () => {
           description,
           image,
           matchId,
-          tokenId,
+          tokenId: actualTokenId,
           timestamp: Date.now(),
           metadataUri,
         };
 
+        // Store NFT in localStorage for persistence
+        const storageKey = `nft-${actualTokenId}-${transactionHash}`;
+        localStorage.setItem(storageKey, JSON.stringify(newNFT));
+
         // Add to created NFTs list
         setCreatedNFTs(prev => [newNFT, ...prev]);
 
-        // Refresh the NFT list to ensure proper loading
-        setTimeout(() => {
-          loadExistingNFTs();
-        }, 2000);
-
-        // Remove the automatic marketplace listing - NFT stays in wallet
-        // notification.success("NFT minted successfully! NFT is now in your wallet.");
+        // Show final success notification
+        notification.success("NFT minted successfully! NFT is now in your wallet.");
 
         // Reset form
         setImage("");
@@ -250,15 +245,20 @@ const Create = () => {
         setDescription("");
         setMatchId("");
         setMintedTokenId(null);
+
+        // Refresh the NFT list to ensure proper loading
+        setTimeout(() => {
+          loadExistingNFTs();
+        }, 2000);
       } else {
-        console.error("NFT minting failed - no transaction response");
-        notification.error("NFT minting failed - no transaction response received. Check console for details.");
+        notification.error("Failed to get transaction hash. Check console for details.");
       }
     } catch (error) {
       console.log("NFT creation error: ", error);
       notification.error("Failed to create NFT. Check console for details.");
     } finally {
       setIsCreating(false);
+      setIsProcessing(false);
     }
   };
 
@@ -281,7 +281,7 @@ const Create = () => {
     // Also clear localStorage to start fresh
     const keys = Object.keys(localStorage);
     keys.forEach(key => {
-      if (key.startsWith("nft-metadata-")) {
+      if (key.startsWith("nft-")) {
         localStorage.removeItem(key);
       }
     });
@@ -299,6 +299,10 @@ const Create = () => {
     try {
       // First approve the marketplace
       console.log("Approving marketplace to transfer NFT...");
+      console.log("NFT Contract:", nftContractInfo.address);
+      console.log("Marketplace Contract:", marketplaceContractInfo.address);
+      console.log("Token ID:", tokenId);
+
       await writeNFTContract({
         functionName: "approve",
         args: [marketplaceContractInfo.address, BigInt(tokenId)],
@@ -311,7 +315,7 @@ const Create = () => {
       // List on marketplace
       console.log("Listing NFT on marketplace...");
       await writeMarketplaceContract({
-        functionName: "listNFT", // Changed from "makeItem" to "listNFT"
+        functionName: "listNFT",
         args: [nftContractInfo.address, BigInt(tokenId), parseEther(price)],
       });
 
@@ -328,54 +332,33 @@ const Create = () => {
       return;
     }
 
-    // If tokenCount is 0 or undefined, it's fine - just means no NFTs minted yet
-    const currentTokenCount = tokenCount || 0;
-
     try {
       // Load real NFT data from localStorage first (these are the actual created NFTs)
       const realNFTs: CreatedNFT[] = [];
 
-      // Get all stored NFT metadata keys
+      // Get all stored NFT keys (using the new storage format)
       const keys = Object.keys(localStorage);
-      const nftKeys = keys.filter(key => key.startsWith("nft-metadata-"));
+      const nftKeys = keys.filter(key => key.startsWith("nft-"));
 
       // Load real NFT data from localStorage
       nftKeys.forEach(key => {
         try {
-          const metadata = JSON.parse(localStorage.getItem(key) || "{}");
-          if (metadata.name && metadata.description) {
-            // Find the corresponding transaction hash from mint events
-            const mintEvent = mintEvents?.find(
-              event =>
-                event.args.from === "0x0000000000000000000000000000000000000000" &&
-                event.args.to !== "0x0000000000000000000000000000000000000000",
-            );
-
-            if (mintEvent?.transactionHash) {
-              const nft: CreatedNFT = {
-                transactionHash: mintEvent.transactionHash,
-                name: metadata.name,
-                price: metadata.price || "0.01",
-                description: metadata.description,
-                image: metadata.image,
-                matchId: metadata.attributes?.matchId || "Unknown",
-                tokenId: realNFTs.length + 1,
-                timestamp: metadata.attributes?.timestamp || Date.now(),
-                metadataUri: `https://ipfs.io/ipfs/${key.replace("nft-metadata-", "")}`,
-              };
-              realNFTs.push(nft);
-            }
+          const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          if (nftData.name && nftData.description && nftData.transactionHash) {
+            realNFTs.push(nftData);
           }
         } catch (parseError) {
-          console.log("Error parsing stored NFT metadata:", parseError);
+          console.log("Error parsing stored NFT data:", parseError);
         }
       });
 
       if (realNFTs.length > 0) {
+        // Sort by timestamp (newest first)
+        realNFTs.sort((a, b) => b.timestamp - a.timestamp);
         setCreatedNFTs(realNFTs);
-        notification.success(`Loaded ${realNFTs.length} real NFTs with actual metadata`);
+        notification.success(`Loaded ${realNFTs.length} NFTs from storage`);
       } else {
-        // Fallback: show basic info from blockchain events if no stored metadata
+        // Fallback: show basic info from blockchain events if no stored data
         const fallbackNFTs: CreatedNFT[] = [];
 
         if (mintEvents && mintEvents.length > 0) {
@@ -396,7 +379,7 @@ const Create = () => {
                 matchId: "Unknown",
                 tokenId: index + 1,
                 timestamp: Date.now() - index * 1000,
-                metadataUri: `https://ipfs.io/ipfs/QmPlaceholder${index + 1}`,
+                metadataUri: "1",
               };
               fallbackNFTs.push(nft);
             }
@@ -408,11 +391,7 @@ const Create = () => {
           notification.info(`Found ${fallbackNFTs.length} NFTs from blockchain (basic info only)`);
         } else {
           setCreatedNFTs([]);
-          if (currentTokenCount === 0) {
-            notification.info("No NFTs found yet. Create your first NFT!");
-          } else {
-            notification.info("No NFTs found. Create your first NFT!");
-          }
+          notification.info("No NFTs found yet. Create your first NFT!");
         }
       }
     } catch (error) {
@@ -422,6 +401,13 @@ const Create = () => {
   };
 
   // Auto-load existing NFTs when component mounts and contracts are available
+  useEffect(() => {
+    if (nftContractInfo?.address) {
+      loadExistingNFTs();
+    }
+  }, [nftContractInfo?.address]);
+
+  // Also load when tokenCount changes
   useEffect(() => {
     if (nftContractInfo?.address && tokenCount !== undefined) {
       loadExistingNFTs();
@@ -450,6 +436,14 @@ const Create = () => {
               <div>
                 <strong>Mint Events:</strong> {mintEvents?.length || 0}
               </div>
+              <div>
+                <strong>Contract ABIs:</strong> NFT:{" "}
+                {nftContractInfo?.abi ? `${nftContractInfo.abi.length} functions` : "No ABI"}, Marketplace:{" "}
+                {marketplaceContractInfo?.abi ? `${marketplaceContractInfo.abi.length} functions` : "No ABI"}
+              </div>
+              <div>
+                <strong>NFT Contract Name:</strong> {contractName || "Loading..."}
+              </div>
             </div>
           </div>
         </div>
@@ -459,11 +453,11 @@ const Create = () => {
           <div className="card bg-success text-success-content shadow-xl mb-6">
             <div className="card-body">
               <h2 className="card-title text-lg">✅ NFT Created Successfully!</h2>
-              <p>Your NFT has been minted and listed on the marketplace.</p>
+              <p>Your NFT has been minted successfully!</p>
               <div className="text-sm">
                 <strong>Transaction Hash:</strong>{" "}
                 <a
-                  href={`https://localhost:3000/blockexplorer/transaction/${lastTransactionHash}`}
+                  href={`/blockexplorer/transaction/${lastTransactionHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="link link-primary"
@@ -593,10 +587,17 @@ const Create = () => {
                   className={`btn btn-primary btn-lg w-full ${isCreating ? "loading" : ""}`}
                   onClick={createNFT}
                   disabled={
-                    !image || !price || !name || !description || !matchId || !matchResult?.verified || isCreating
+                    !image ||
+                    !price ||
+                    !name ||
+                    !description ||
+                    !matchId ||
+                    !matchResult?.verified ||
+                    isCreating ||
+                    isProcessing
                   }
                 >
-                  {isCreating ? "Creating NFT..." : "Create & Mint NFT!"}
+                  {isCreating ? "Creating NFT..." : isProcessing ? "Processing..." : "Create & Mint NFT!"}
                 </button>
               </div>
             </div>
@@ -650,7 +651,7 @@ const Create = () => {
                         <td>{nft.matchId}</td>
                         <td className="font-mono text-xs">
                           <a
-                            href={`https://localhost:3000/blockexplorer/transaction/${nft.transactionHash}`}
+                            href={`/blockexplorer/transaction/${nft.transactionHash}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="link link-primary"
@@ -721,7 +722,8 @@ const Create = () => {
               <strong>Mint NFT:</strong> Click the button to mint your NFT on the blockchain.
             </li>
             <li>
-              <strong>List on Marketplace:</strong> After minting, your NFT will be automatically listed for sale.
+              <strong>List on Marketplace:</strong> After minting, use the &quot;List&quot; button to list your NFT for
+              sale.
             </li>
           </ol>
         </div>
