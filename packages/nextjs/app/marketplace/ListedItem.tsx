@@ -1,10 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { formatEther } from "viem";
+import { useCallback, useEffect, useState } from "react";
+import { formatEther, parseEther } from "viem";
 import { useAccount } from "wagmi";
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
+
+interface OwnedNFT {
+  transactionHash: string;
+  name: string;
+  price: string;
+  description: string;
+  image: string;
+  matchId: string;
+  tokenId: number;
+  timestamp: number;
+  metadataUri: string;
+}
 
 interface ListedItem {
   totalPrice: bigint;
@@ -25,6 +37,7 @@ function renderSoldItems(items: ListedItem[]) {
           <div key={idx} className="overflow-hidden">
             <div className="card bg-base-100 shadow-xl">
               <figure>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={item.image} alt={item.name} className="w-full h-48 object-cover" />
               </figure>
               <div className="card-body p-4">
@@ -49,6 +62,10 @@ export default function MyListedItems() {
   const [loading, setLoading] = useState(true);
   const [listedItems, setListedItems] = useState<ListedItem[]>([]);
   const [soldItems, setSoldItems] = useState<ListedItem[]>([]);
+  const [ownedNFTs, setOwnedNFTs] = useState<OwnedNFT[]>([]);
+  const [selectedNFT, setSelectedNFT] = useState<OwnedNFT | null>(null);
+  const [listingPrice, setListingPrice] = useState<string>("");
+  const [isListing, setIsListing] = useState(false);
 
   const { address: account } = useAccount();
 
@@ -58,7 +75,20 @@ export default function MyListedItems() {
     functionName: "itemCount",
   });
 
-  const loadListedItems = async () => {
+  // Get deployed contract info
+  const { data: nftContractInfo } = useDeployedContractInfo({ contractName: "NFT" });
+  const { data: marketplaceContractInfo } = useDeployedContractInfo({ contractName: "Marketplace" });
+
+  // Use Scaffold-ETH hooks for contract interactions
+  const { writeContractAsync: writeNFTContract } = useScaffoldWriteContract({
+    contractName: "NFT",
+  });
+
+  const { writeContractAsync: writeMarketplaceContract } = useScaffoldWriteContract({
+    contractName: "Marketplace",
+  });
+
+  const loadListedItems = useCallback(async () => {
     if (!account || !itemCount) return;
 
     try {
@@ -108,13 +138,103 @@ export default function MyListedItems() {
     } finally {
       setLoading(false);
     }
+  }, [account, itemCount]);
+
+  const loadOwnedNFTs = () => {
+    try {
+      const realNFTs: OwnedNFT[] = [];
+
+      // Get all stored NFT keys
+      const keys = Object.keys(localStorage);
+      const nftKeys = keys.filter(key => key.startsWith("nft-"));
+
+      console.log("ListedItem - Found NFT keys:", nftKeys);
+
+      // Load real NFT data from localStorage
+      nftKeys.forEach(key => {
+        try {
+          const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          console.log(`ListedItem - Loading NFT data for key ${key}:`, nftData);
+
+          if (nftData.name && nftData.description && nftData.transactionHash) {
+            // Check if image is a valid data URL or needs fallback
+            if (!nftData.image || (!nftData.image.startsWith("data:") && !nftData.image.startsWith("http"))) {
+              console.log(`ListedItem - Invalid image for NFT ${key}:`, nftData.image);
+              // Use a placeholder if image is invalid
+              nftData.image = "/placeholder-image.svg";
+            }
+            realNFTs.push(nftData);
+          }
+        } catch (parseError) {
+          console.log("ListedItem - Error parsing stored NFT data:", parseError);
+        }
+      });
+
+      // Sort by timestamp (newest first)
+      realNFTs.sort((a, b) => b.timestamp - a.timestamp);
+      console.log("ListedItem - Loaded owned NFTs:", realNFTs);
+      setOwnedNFTs(realNFTs);
+    } catch (error) {
+      console.log("ListedItem - Error loading owned NFTs:", error);
+    }
+  };
+
+  const listNFTOnMarketplace = async (nft: OwnedNFT, price: string) => {
+    if (!nftContractInfo?.address || !marketplaceContractInfo?.address) {
+      notification.error("Contract addresses not found. Cannot list NFT.");
+      return;
+    }
+
+    if (!price || parseFloat(price) <= 0) {
+      notification.error("Please enter a valid price");
+      return;
+    }
+
+    setIsListing(true);
+
+    try {
+      // First approve the marketplace
+      console.log("Approving marketplace to transfer NFT...");
+      console.log("NFT Contract:", nftContractInfo.address);
+      console.log("Marketplace Contract:", marketplaceContractInfo.address);
+      console.log("Token ID:", nft.tokenId);
+
+      await writeNFTContract({
+        functionName: "approve",
+        args: [marketplaceContractInfo.address, BigInt(nft.tokenId)],
+        gas: BigInt(200000), // Gas limit for approve
+      });
+      notification.success("NFT approved for marketplace transfer!");
+
+      // Wait for approval
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // List on marketplace
+      console.log("Listing NFT on marketplace...");
+      await writeMarketplaceContract({
+        functionName: "listNFT",
+        args: [nftContractInfo.address, BigInt(nft.tokenId), parseEther(price)],
+        gas: BigInt(300000), // Gas limit for listNFT
+      });
+
+      notification.success("NFT listed on marketplace successfully!");
+
+      // Refresh the listed items
+      loadListedItems();
+    } catch (error) {
+      console.log("Marketplace listing error:", error);
+      notification.error("Failed to list NFT on marketplace. Check console for details.");
+    } finally {
+      setIsListing(false);
+    }
   };
 
   useEffect(() => {
     if (account && itemCount) {
       loadListedItems();
     }
-  }, [account, itemCount]);
+    loadOwnedNFTs();
+  }, [account, itemCount, loadListedItems]);
 
   if (loading) {
     return (
@@ -137,6 +257,7 @@ export default function MyListedItems() {
               <div key={idx} className="overflow-hidden">
                 <div className="card bg-base-100 shadow-xl">
                   <figure>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={item.image} alt={item.name} className="w-full h-48 object-cover" />
                   </figure>
                   <div className="card-body p-4">
@@ -161,6 +282,74 @@ export default function MyListedItems() {
             <h2 className="text-2xl font-bold">No listed assets</h2>
             <p className="text-gray-600 mt-2">You have not listed any NFTs yet</p>
             <p className="text-sm text-gray-500 mt-1">List your first NFT to get started!</p>
+
+            {ownedNFTs.length > 0 && (
+              <div className="mt-6">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (ownedNFTs.length > 0) {
+                      setSelectedNFT(ownedNFTs[0]);
+                      setListingPrice(ownedNFTs[0].price);
+                    }
+                  }}
+                >
+                  📋 List Your First NFT
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* NFT Listing Modal */}
+      {selectedNFT && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-md">
+            <h3 className="font-bold text-lg mb-4">List NFT on Marketplace</h3>
+            <div className="space-y-4">
+              <div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={selectedNFT.image} alt={selectedNFT.name} className="w-full h-32 object-cover rounded-lg" />
+              </div>
+              <div>
+                <div>
+                  <strong>Name:</strong> {selectedNFT.name}
+                </div>
+                <div>
+                  <strong>Token ID:</strong> {selectedNFT.tokenId}
+                </div>
+              </div>
+              <div>
+                <label className="label">
+                  <span className="label-text">Listing Price (ETH)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.01"
+                  className="input input-bordered w-full"
+                  value={listingPrice}
+                  onChange={e => setListingPrice(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  listNFTOnMarketplace(selectedNFT, listingPrice);
+                  setSelectedNFT(null);
+                }}
+                disabled={isListing || !listingPrice || parseFloat(listingPrice) <= 0}
+              >
+                {isListing ? "Listing..." : "📋 List NFT"}
+              </button>
+              <button className="btn" onClick={() => setSelectedNFT(null)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

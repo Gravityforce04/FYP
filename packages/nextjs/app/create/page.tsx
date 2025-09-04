@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { parseEther } from "viem";
 import { Address } from "~~/components/scaffold-eth";
 import {
@@ -100,51 +100,84 @@ const Create = () => {
 
     if (!file) return;
 
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      notification.error("Please select a valid image file");
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      notification.error("Image size must be less than 5MB");
+      return;
+    }
+
     setIsUploading(true);
 
     try {
-      // Create a local URL for preview
-      const localImageUrl = URL.createObjectURL(file);
-      setImage(localImageUrl);
-
-      notification.success("Image uploaded successfully! Preview available.");
+      // Convert file to base64 data URL for persistent storage
+      const reader = new FileReader();
+      reader.onload = e => {
+        const base64DataUrl = e.target?.result as string;
+        console.log("Image uploaded, base64 data URL length:", base64DataUrl.length);
+        console.log("Image preview URL:", base64DataUrl.substring(0, 50) + "...");
+        setImage(base64DataUrl);
+        notification.success("Image uploaded successfully! Preview available.");
+        setIsUploading(false);
+      };
+      reader.onerror = () => {
+        notification.error("Failed to read image file");
+        setIsUploading(false);
+      };
+      reader.readAsDataURL(file);
     } catch (error) {
       console.log("Image upload error: ", error);
       notification.error("Failed to upload image");
-    } finally {
       setIsUploading(false);
     }
   };
 
   const uploadMetadataToIPFS = async (metadata: NFTMetadata): Promise<string> => {
     try {
-      // Use the simplest possible metadata URI - just a number
-      const metadataUri = "1";
+      // Create a more efficient metadata approach
+      // Store the full metadata locally and use a reference URI on-chain
+      const metadataId = `nft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       // Store complete metadata locally for demo purposes
-      localStorage.setItem(`nft-metadata-${metadataUri}`, JSON.stringify(metadata));
+      localStorage.setItem(`nft-metadata-${metadataId}`, JSON.stringify(metadata));
 
-      notification.success("Metadata prepared and stored locally (URI: " + metadataUri + ")");
+      // Create a lightweight on-chain metadata URI that references the stored data
+      const lightweightMetadata = {
+        name: metadata.name,
+        description: metadata.description,
+        image:
+          "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5GVCBJbWFnZTwvdGV4dD48L3N2Zz4=", // Placeholder SVG
+        external_url: `https://app.localhost/metadata/${metadataId}`,
+        attributes: metadata.attributes,
+      };
+
+      // Create a data URL for the lightweight metadata
+      const metadataString = JSON.stringify(lightweightMetadata);
+      const metadataUri = `data:application/json;base64,${btoa(metadataString)}`;
+
+      console.log("Lightweight metadata URI length:", metadataUri.length);
+      notification.success("Metadata prepared with optimized storage");
       return metadataUri;
     } catch (error) {
       console.log("IPFS metadata preparation error: ", error);
-      // Fallback to simple string format
-      return "1";
+      // Fallback to simple format
+      return "data:application/json;base64,eyJuYW1lIjoiVGVzdCIsImRlc2NyaXB0aW9uIjoiVGVzdCBOZnQifQ==";
     }
   };
 
   // Function to get the actual token ID from the blockchain
   const getActualTokenId = async (): Promise<number> => {
     try {
-      // Get the current token count from the contract
-      const currentTokenCount = tokenCount ? Number(tokenCount) : 0;
-
-      // The new token ID should be the current count
-      return currentTokenCount;
+      // The minted token ID is the current token count
+      return tokenCount ? Number(tokenCount) : 1;
     } catch (error) {
       console.log("Error getting actual token ID:", error);
-      // Fallback to current token count
-      return tokenCount ? Number(tokenCount) : 1;
+      return 1;
     }
   };
 
@@ -199,10 +232,16 @@ const Create = () => {
       // Upload metadata to IPFS
       const metadataUri = await uploadMetadataToIPFS(metadata);
 
+      // Estimate gas for the transaction
+      console.log("Metadata URI length:", metadataUri.length);
+      const estimatedGas = Math.max(2000000, metadataUri.length * 50); // More reasonable gas estimation
+      console.log("Estimated gas needed:", estimatedGas);
+
       // Mint NFT using the NFT contract
       const tx = await writeNFTContract({
         functionName: "mint",
         args: [metadataUri],
+        gas: BigInt(estimatedGas), // Dynamic gas estimation based on metadata size
       });
 
       // Simple transaction hash extraction - just get the hash directly
@@ -306,6 +345,7 @@ const Create = () => {
       await writeNFTContract({
         functionName: "approve",
         args: [marketplaceContractInfo.address, BigInt(tokenId)],
+        gas: BigInt(1000000), // Increased gas limit for approve
       });
       notification.success("NFT approved for marketplace transfer!");
 
@@ -317,6 +357,7 @@ const Create = () => {
       await writeMarketplaceContract({
         functionName: "listNFT",
         args: [nftContractInfo.address, BigInt(tokenId), parseEther(price)],
+        gas: BigInt(2000000), // Increased gas limit for listNFT
       });
 
       notification.success("NFT listed on marketplace successfully!");
@@ -326,7 +367,7 @@ const Create = () => {
     }
   };
 
-  const loadExistingNFTs = async () => {
+  const loadExistingNFTs = useCallback(async () => {
     if (!nftContractInfo?.address) {
       notification.error("NFT contract address not found. Cannot load existing NFTs.");
       return;
@@ -398,21 +439,21 @@ const Create = () => {
       console.log("Error loading existing NFTs: ", error);
       notification.error("Failed to load existing NFTs. Check console for details.");
     }
-  };
+  }, [nftContractInfo?.address, mintEvents]);
 
   // Auto-load existing NFTs when component mounts and contracts are available
   useEffect(() => {
     if (nftContractInfo?.address) {
       loadExistingNFTs();
     }
-  }, [nftContractInfo?.address]);
+  }, [nftContractInfo?.address, loadExistingNFTs]);
 
   // Also load when tokenCount changes
   useEffect(() => {
     if (nftContractInfo?.address && tokenCount !== undefined) {
       loadExistingNFTs();
     }
-  }, [nftContractInfo?.address, tokenCount]);
+  }, [nftContractInfo?.address, tokenCount, loadExistingNFTs]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -530,7 +571,15 @@ const Create = () => {
                 )}
                 {image && (
                   <div className="mt-2">
-                    <img src={image} alt="Preview" className="w-32 h-32 object-cover rounded-lg" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image}
+                      alt="Preview"
+                      className="w-32 h-32 object-cover rounded-lg"
+                      onLoad={() => console.log("Image preview loaded successfully")}
+                      onError={e => console.log("Image preview failed to load:", e)}
+                    />
+                    <div className="text-xs text-gray-500 mt-1">Preview: {image.substring(0, 30)}...</div>
                   </div>
                 )}
               </div>
