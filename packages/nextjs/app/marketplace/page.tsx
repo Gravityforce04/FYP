@@ -41,56 +41,134 @@ function BrowseNFTs() {
   });
 
   const loadNFTItems = useCallback(async () => {
-    if (!itemCount) return;
+    console.log("Loading NFT items, itemCount:", itemCount);
+
+    if (!itemCount) {
+      console.log("No item count available, setting loading to false");
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
       const items: NFTItem[] = [];
+      console.log("Starting to load items from marketplace...");
 
       // Load all available NFTs
       for (let index = 1; index <= Number(itemCount); index++) {
         try {
+          console.log(`Loading item ${index}...`);
           // Get item from marketplace
-          const item = await fetch(`/api/marketplace/item/${index}`).then(res => res.json());
+          const response = await fetch(`/api/marketplace/item/${index}`);
+          console.log(`API response for item ${index}:`, response.status);
+
+          if (!response.ok) {
+            console.log(`Item ${index} not found or error:`, response.status);
+            continue;
+          }
+
+          const item = await response.json();
+          console.log(`Item ${index} data:`, item);
 
           if (!item.sold) {
             // Get NFT metadata from IPFS
-            const response = await fetch(item.tokenURI);
-            const metadata = await response.json();
+            try {
+              const metadataResponse = await fetch(item.tokenURI);
+              const metadata = await metadataResponse.json();
+              console.log(`Metadata for item ${index}:`, metadata);
 
-            // Create NFT item object
-            const nftItem: NFTItem = {
-              itemId: BigInt(index),
-              nft: item.nft,
-              tokenId: item.tokenId,
-              price: item.price,
-              seller: item.seller,
-              sold: item.sold,
-              name: metadata.name || "Unknown NFT",
-              description: metadata.description || "No description",
-              image: metadata.image || "/placeholder-image.png",
-            };
+              // Create NFT item object
+              const nftItem: NFTItem = {
+                itemId: BigInt(index),
+                nft: item.nft,
+                tokenId: item.tokenId,
+                price: item.price,
+                seller: item.seller,
+                sold: item.sold,
+                name: metadata.name || "Unknown NFT",
+                description: metadata.description || "No description",
+                image: metadata.image || "/placeholder-image.png",
+              };
 
-            items.push(nftItem);
+              items.push(nftItem);
+              console.log(`Added item ${index} to list`);
+            } catch (metadataError) {
+              console.log(`Error loading metadata for item ${index}:`, metadataError);
+            }
+          } else {
+            console.log(`Item ${index} is already sold`);
           }
         } catch (error) {
           console.log(`Error loading item ${index}:`, error);
         }
       }
 
+      console.log("Final items loaded:", items);
       setNftItems(items);
+
+      // If no items found from marketplace, try loading from localStorage as fallback
+      if (items.length === 0) {
+        console.log("No items found in marketplace, trying localStorage fallback...");
+        loadFromLocalStorage();
+      }
     } catch (error) {
       console.log("Error loading NFT items:", error);
+      // Try localStorage fallback on error
+      loadFromLocalStorage();
     } finally {
+      console.log("Setting loading to false");
       setLoading(false);
     }
   }, [itemCount]);
 
+  // Fallback function to load NFTs from localStorage
+  const loadFromLocalStorage = useCallback(() => {
+    console.log("Loading NFTs from localStorage as fallback...");
+    try {
+      const keys = Object.keys(localStorage);
+      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata"));
+      const fallbackItems: NFTItem[] = [];
+
+      nftKeys.forEach(key => {
+        try {
+          const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          if (nftData.name && nftData.description && nftData.transactionHash) {
+            // Create a marketplace item from localStorage data
+            const fallbackItem: NFTItem = {
+              itemId: BigInt(nftData.tokenId || 1),
+              nft: "0x0000000000000000000000000000000000000000", // Placeholder
+              tokenId: nftData.tokenId || 1,
+              price: nftData.price || "0.01",
+              seller: nftData.creator || "0x0000000000000000000000000000000000000000",
+              sold: false,
+              name: nftData.name,
+              description: nftData.description,
+              image: nftData.image || "/placeholder-image.png",
+            };
+            fallbackItems.push(fallbackItem);
+          }
+        } catch (error) {
+          console.log("Error parsing localStorage NFT data:", error);
+        }
+      });
+
+      console.log("Fallback items loaded:", fallbackItems);
+      if (fallbackItems.length > 0) {
+        setNftItems(fallbackItems);
+      }
+    } catch (error) {
+      console.log("Error loading from localStorage:", error);
+    }
+  }, []);
+
   useEffect(() => {
     if (itemCount) {
       loadNFTItems();
+    } else {
+      // If no itemCount, try localStorage fallback
+      loadFromLocalStorage();
     }
-  }, [itemCount, loadNFTItems]);
+  }, [itemCount, loadNFTItems, loadFromLocalStorage]);
 
   if (loading) {
     return (
@@ -141,32 +219,50 @@ function OwnedNFTs() {
   const [ownedNFTs, setOwnedNFTs] = useState<OwnedNFT[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNFT, setSelectedNFT] = useState<OwnedNFT | null>(null);
+  const { address: connectedAddress } = useAccount();
 
   const loadOwnedNFTs = () => {
     try {
       setLoading(true);
       const realNFTs: OwnedNFT[] = [];
 
+      if (!connectedAddress) {
+        console.log("No wallet connected, clearing owned NFTs");
+        setOwnedNFTs([]);
+        setLoading(false);
+        return;
+      }
+
       // Get all stored NFT keys
       const keys = Object.keys(localStorage);
-      const nftKeys = keys.filter(key => key.startsWith("nft-"));
+      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata"));
 
       console.log("Found NFT keys:", nftKeys);
+      console.log("Loading NFTs for connected wallet:", connectedAddress);
 
-      // Load real NFT data from localStorage
+      // Load real NFT data from localStorage and filter by connected wallet
       nftKeys.forEach(key => {
         try {
           const nftData = JSON.parse(localStorage.getItem(key) || "{}");
           console.log(`Loading NFT data for key ${key}:`, nftData);
 
           if (nftData.name && nftData.description && nftData.transactionHash) {
-            // Check if image is a valid data URL or needs fallback
-            if (!nftData.image || (!nftData.image.startsWith("data:") && !nftData.image.startsWith("http"))) {
-              console.log(`Invalid image for NFT ${key}:`, nftData.image);
-              // Use a placeholder if image is invalid
-              nftData.image = "/placeholder-image.svg";
+            // Only show NFTs created by the connected wallet
+            if (nftData.creator && nftData.creator.toLowerCase() === connectedAddress.toLowerCase()) {
+              // Skip placeholder/recovered NFTs with generic names
+              if (nftData.name.includes("Recovered NFT") || nftData.name.includes("NFT #")) {
+                console.log("Skipping placeholder NFT:", nftData.name);
+                return;
+              }
+
+              // Check if image is a valid data URL or needs fallback
+              if (!nftData.image || (!nftData.image.startsWith("data:") && !nftData.image.startsWith("http"))) {
+                console.log(`Invalid image for NFT ${key}:`, nftData.image);
+                // Use a placeholder if image is invalid
+                nftData.image = "/placeholder-image.svg";
+              }
+              realNFTs.push(nftData);
             }
-            realNFTs.push(nftData);
           }
         } catch (parseError) {
           console.log("Error parsing stored NFT data:", parseError);
@@ -187,7 +283,7 @@ function OwnedNFTs() {
 
   useEffect(() => {
     loadOwnedNFTs();
-  }, []);
+  }, [connectedAddress]);
 
   const formatTimestamp = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();

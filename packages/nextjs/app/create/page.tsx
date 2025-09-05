@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { parseEther } from "viem";
+import { useAccount } from "wagmi";
 import { Address } from "~~/components/scaffold-eth";
 import {
   useDeployedContractInfo,
@@ -34,6 +35,7 @@ interface CreatedNFT {
   tokenId: number;
   timestamp: number;
   metadataUri: string;
+  creator: string; // Add creator address
 }
 
 const Create = () => {
@@ -48,6 +50,9 @@ const Create = () => {
   const [mintedTokenId, setMintedTokenId] = useState<number | null>(null);
   const [createdNFTs, setCreatedNFTs] = useState<CreatedNFT[]>([]);
   const [lastTransactionHash, setLastTransactionHash] = useState<string>("");
+
+  // Get connected wallet address
+  const { address: connectedAddress } = useAccount();
 
   // Get deployed contract info
   const { data: nftContractInfo } = useDeployedContractInfo({ contractName: "NFT" });
@@ -74,6 +79,45 @@ const Create = () => {
     functionName: "getMatchResult",
     args: [matchId ? BigInt(matchId) : BigInt(0)],
   });
+
+  // Debug match result
+  console.log("Match ID being checked:", matchId);
+  console.log("Match result from contract:", matchResult);
+  console.log("Match result verified:", matchResult?.verified);
+
+  // Check if match exists in local transaction history as fallback
+  const checkLocalMatchHistory = (matchId: string) => {
+    if (!matchId) return null;
+
+    // Get all stored transaction history from localStorage
+    const keys = Object.keys(localStorage);
+    const matchKeys = keys.filter(key => key.startsWith("match-transaction-history"));
+
+    for (const key of matchKeys) {
+      try {
+        const history = JSON.parse(localStorage.getItem(key) || "[]");
+        const match = history.find((tx: any) => tx.matchId === matchId);
+        if (match) {
+          console.log("Found match in local history:", match);
+          return {
+            matchId: match.matchId,
+            winner: match.winner,
+            participants: match.participants,
+            verified: true, // We trust our local history
+            matchData: match.matchData,
+            timestamp: match.timestamp,
+          };
+        }
+      } catch (error) {
+        console.error("Error parsing local match history:", error);
+      }
+    }
+    return null;
+  };
+
+  // Get local match result as fallback
+  const localMatchResult = matchId ? checkLocalMatchHistory(matchId) : null;
+  const effectiveMatchResult = matchResult || localMatchResult;
 
   // Read NFT contract to get token count for proper token ID
   const { data: tokenCount } = useScaffoldReadContract({
@@ -143,8 +187,7 @@ const Create = () => {
       // Store the full metadata locally and use a reference URI on-chain
       const metadataId = `nft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // Store complete metadata locally for demo purposes
-      localStorage.setItem(`nft-metadata-${metadataId}`, JSON.stringify(metadata));
+      // Don't store large metadata in localStorage to avoid quota exceeded error
 
       // Create a lightweight on-chain metadata URI that references the stored data
       const lightweightMetadata = {
@@ -171,13 +214,25 @@ const Create = () => {
   };
 
   // Function to get the actual token ID from the blockchain
-  const getActualTokenId = async (): Promise<number> => {
+  const getActualTokenId = async (transactionHash: string): Promise<number> => {
     try {
-      // The minted token ID is the current token count
-      return tokenCount ? Number(tokenCount) : 1;
+      // Try to get token ID from mint events
+      if (mintEvents && mintEvents.length > 0) {
+        const mintEvent = mintEvents.find(
+          event =>
+            event.transactionHash === transactionHash &&
+            event.args.from === "0x0000000000000000000000000000000000000000",
+        );
+        if (mintEvent && mintEvent.args.tokenId) {
+          return Number(mintEvent.args.tokenId);
+        }
+      }
+
+      // Fallback: use current token count - 1 (since it's incremented after minting)
+      return tokenCount ? Number(tokenCount) - 1 : 1;
     } catch (error) {
       console.log("Error getting actual token ID:", error);
-      return 1;
+      return tokenCount ? Number(tokenCount) - 1 : 1;
     }
   };
 
@@ -187,8 +242,10 @@ const Create = () => {
       return;
     }
 
-    if (!matchResult || !matchResult.verified) {
-      notification.error("Invalid or unverified Match ID. Please check the Match ID.");
+    if (!effectiveMatchResult || !effectiveMatchResult.verified) {
+      notification.error(
+        "Invalid or unverified Match ID. Please check the Match ID or wait for the transaction to be mined.",
+      );
       return;
     }
 
@@ -198,9 +255,9 @@ const Create = () => {
     }
 
     // Check if user is the winner or participant
-    const isWinner = matchResult.winner.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase();
-    const isParticipant = matchResult.participants.some(
-      participant => participant.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase(),
+    const isWinner = effectiveMatchResult.winner.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase();
+    const isParticipant = effectiveMatchResult.participants.some(
+      (participant: string) => participant.toLowerCase() === window.ethereum?.selectedAddress?.toLowerCase(),
     );
 
     if (!isWinner && !isParticipant) {
@@ -232,17 +289,38 @@ const Create = () => {
       // Upload metadata to IPFS
       const metadataUri = await uploadMetadataToIPFS(metadata);
 
-      // Estimate gas for the transaction
+      // Estimate gas for the transaction (balanced for success vs cost)
       console.log("Metadata URI length:", metadataUri.length);
-      const estimatedGas = Math.max(2000000, metadataUri.length * 50); // More reasonable gas estimation
+      console.log("Metadata URI preview:", metadataUri.substring(0, 100) + "...");
+      const estimatedGas = Math.max(1000000, metadataUri.length * 20); // Balanced gas estimation
       console.log("Estimated gas needed:", estimatedGas);
 
       // Mint NFT using the NFT contract
-      const tx = await writeNFTContract({
-        functionName: "mint",
-        args: [metadataUri],
-        gas: BigInt(estimatedGas), // Dynamic gas estimation based on metadata size
-      });
+      console.log("Attempting to mint NFT with metadata URI:", metadataUri);
+      console.log("Using gas limit:", estimatedGas);
+      console.log("NFT contract address:", nftContractInfo?.address);
+
+      let tx;
+      try {
+        // First attempt with estimated gas
+        tx = await writeNFTContract({
+          functionName: "mint",
+          args: [metadataUri],
+          gas: BigInt(estimatedGas),
+        });
+        console.log("Mint transaction result:", tx);
+      } catch (error) {
+        console.log("First mint attempt failed, trying with higher gas:", error);
+        // Second attempt with higher gas limit
+        const higherGas = Math.max(2000000, metadataUri.length * 50);
+        console.log("Retrying with higher gas limit:", higherGas);
+        tx = await writeNFTContract({
+          functionName: "mint",
+          args: [metadataUri],
+          gas: BigInt(higherGas),
+        });
+        console.log("Mint transaction result (retry):", tx);
+      }
 
       // Simple transaction hash extraction - just get the hash directly
       const transactionHash = typeof tx === "string" ? tx : (tx as any)?.hash || (tx as any)?.transactionHash;
@@ -251,25 +329,47 @@ const Create = () => {
         setLastTransactionHash(transactionHash);
 
         // Wait for the transaction to be mined and get the actual token ID
-        const actualTokenId = await getActualTokenId();
+        const actualTokenId = await getActualTokenId(transactionHash);
+        console.log("Calculated token ID:", actualTokenId);
+        console.log("Current token count:", tokenCount);
         setMintedTokenId(actualTokenId);
 
-        // Create NFT record with actual token ID
+        // Create NFT record with actual token ID (store image for preview)
         const newNFT: CreatedNFT = {
           transactionHash,
           name,
           price,
           description,
-          image,
+          image: image, // Store actual image for preview
           matchId,
           tokenId: actualTokenId,
           timestamp: Date.now(),
           metadataUri,
+          creator: connectedAddress || "", // Add creator address
         };
 
-        // Store NFT in localStorage for persistence
+        // Store NFT in localStorage for persistence (without large image data)
         const storageKey = `nft-${actualTokenId}-${transactionHash}`;
         localStorage.setItem(storageKey, JSON.stringify(newNFT));
+
+        // Also update any existing NFT with the same transaction hash to correct token ID
+        const keys = Object.keys(localStorage);
+        const existingKeys = keys.filter(key => key.startsWith("nft-") && key.includes(transactionHash));
+        existingKeys.forEach(key => {
+          if (key !== storageKey) {
+            try {
+              const existingNFT = JSON.parse(localStorage.getItem(key) || "{}");
+              if (existingNFT.transactionHash === transactionHash) {
+                // Update the token ID in the existing record
+                existingNFT.tokenId = actualTokenId;
+                localStorage.setItem(key, JSON.stringify(existingNFT));
+                console.log("Updated existing NFT record with correct token ID:", actualTokenId);
+              }
+            } catch (error) {
+              console.log("Error updating existing NFT record:", error);
+            }
+          }
+        });
 
         // Add to created NFTs list
         setCreatedNFTs(prev => [newNFT, ...prev]);
@@ -311,23 +411,6 @@ const Create = () => {
     return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
   };
 
-  // Clear NFT list and reset states
-  const clearNFTList = () => {
-    setCreatedNFTs([]);
-    setMintedTokenId(null);
-    setLastTransactionHash("");
-
-    // Also clear localStorage to start fresh
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.startsWith("nft-")) {
-        localStorage.removeItem(key);
-      }
-    });
-
-    notification.success("NFT list cleared and localStorage reset");
-  };
-
   // Manual marketplace listing function
   const listNFTOnMarketplace = async (tokenId: number, price: string) => {
     if (!nftContractInfo?.address || !marketplaceContractInfo?.address) {
@@ -345,7 +428,7 @@ const Create = () => {
       await writeNFTContract({
         functionName: "approve",
         args: [marketplaceContractInfo.address, BigInt(tokenId)],
-        gas: BigInt(1000000), // Increased gas limit for approve
+        gas: BigInt(100000), // Reduced gas limit for approve
       });
       notification.success("NFT approved for marketplace transfer!");
 
@@ -357,7 +440,7 @@ const Create = () => {
       await writeMarketplaceContract({
         functionName: "listNFT",
         args: [nftContractInfo.address, BigInt(tokenId), parseEther(price)],
-        gas: BigInt(2000000), // Increased gas limit for listNFT
+        gas: BigInt(300000), // Reduced gas limit for listNFT
       });
 
       notification.success("NFT listed on marketplace successfully!");
@@ -373,23 +456,75 @@ const Create = () => {
       return;
     }
 
+    if (!connectedAddress) {
+      console.log("No wallet connected, clearing NFT list");
+      setCreatedNFTs([]);
+      return;
+    }
+
+    console.log("Loading NFTs for connected wallet:", connectedAddress);
+
     try {
       // Load real NFT data from localStorage first (these are the actual created NFTs)
       const realNFTs: CreatedNFT[] = [];
 
       // Get all stored NFT keys (using the new storage format)
       const keys = Object.keys(localStorage);
-      const nftKeys = keys.filter(key => key.startsWith("nft-"));
+      console.log("All localStorage keys:", keys);
+      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata")); // Exclude metadata keys
+      console.log("NFT keys found:", nftKeys);
 
-      // Load real NFT data from localStorage
+      // Load real NFT data from localStorage and filter by connected wallet
       nftKeys.forEach(key => {
         try {
           const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          console.log("Processing NFT key:", key, "Data:", nftData);
           if (nftData.name && nftData.description && nftData.transactionHash) {
-            realNFTs.push(nftData);
+            // Only show NFTs created by the connected wallet
+            if (nftData.creator && nftData.creator.toLowerCase() === connectedAddress.toLowerCase()) {
+              // Skip placeholder/recovered NFTs with generic names
+              if (nftData.name.includes("Recovered NFT") || nftData.name.includes("NFT #")) {
+                console.log("Skipping placeholder NFT:", nftData.name);
+                return;
+              }
+
+              // Try to get the correct token ID from mint events
+              if (mintEvents && mintEvents.length > 0) {
+                const mintEvent = mintEvents.find(
+                  event =>
+                    event.transactionHash === nftData.transactionHash &&
+                    event.args.from === "0x0000000000000000000000000000000000000000",
+                );
+                if (mintEvent && mintEvent.args.tokenId) {
+                  const correctTokenId = Number(mintEvent.args.tokenId);
+                  if (nftData.tokenId !== correctTokenId) {
+                    console.log(
+                      `Auto-correcting token ID for ${nftData.name}: ${nftData.tokenId} -> ${correctTokenId}`,
+                    );
+                    nftData.tokenId = correctTokenId;
+                    // Update the localStorage record
+                    localStorage.setItem(key, JSON.stringify(nftData));
+                  }
+                }
+              }
+              realNFTs.push(nftData);
+            }
           }
         } catch (parseError) {
           console.log("Error parsing stored NFT data:", parseError);
+        }
+      });
+
+      // Clean up placeholder NFTs from localStorage
+      nftKeys.forEach(key => {
+        try {
+          const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          if (nftData.name && (nftData.name.includes("Recovered NFT") || nftData.name.includes("NFT #"))) {
+            console.log("Removing placeholder NFT from storage:", nftData.name);
+            localStorage.removeItem(key);
+          }
+        } catch (error) {
+          console.log("Error cleaning up placeholder NFT:", error);
         }
       });
 
@@ -421,6 +556,7 @@ const Create = () => {
                 tokenId: index + 1,
                 timestamp: Date.now() - index * 1000,
                 metadataUri: "1",
+                creator: connectedAddress || "Unknown",
               };
               fallbackNFTs.push(nft);
             }
@@ -439,7 +575,7 @@ const Create = () => {
       console.log("Error loading existing NFTs: ", error);
       notification.error("Failed to load existing NFTs. Check console for details.");
     }
-  }, [nftContractInfo?.address, mintEvents]);
+  }, [nftContractInfo?.address, connectedAddress]);
 
   // Auto-load existing NFTs when component mounts and contracts are available
   useEffect(() => {
@@ -465,6 +601,10 @@ const Create = () => {
           <div className="card-body">
             <h2 className="card-title text-lg">🐛 Debug Info</h2>
             <div className="text-sm space-y-1">
+              <div>
+                <strong>Connected Wallet:</strong>{" "}
+                {connectedAddress ? `${connectedAddress.slice(0, 6)}...${connectedAddress.slice(-4)}` : "Not Connected"}
+              </div>
               <div>
                 <strong>NFT Contract:</strong> {nftContractInfo?.address || "Not Found"}
               </div>
@@ -532,21 +672,30 @@ const Create = () => {
                   onChange={e => setMatchId(e.target.value)}
                   required
                 />
-                {matchId && matchResult && (
+                {matchId && effectiveMatchResult && (
                   <div className="mt-2 p-3 bg-base-200 rounded-lg">
                     <div className="text-sm">
                       <strong>Match #{matchId}</strong>
                     </div>
                     <div className="text-sm">
-                      Winner: <Address address={matchResult.winner} />
+                      Winner: <Address address={effectiveMatchResult.winner} />
                     </div>
-                    <div className="text-sm">Status: {matchResult.verified ? "✅ Verified" : "❌ Not Verified"}</div>
-                    <div className="text-sm">Participants: {matchResult.participants.length}</div>
+                    <div className="text-sm">
+                      Status: {effectiveMatchResult.verified ? "✅ Verified" : "❌ Not Verified"}
+                    </div>
+                    <div className="text-sm">Participants: {effectiveMatchResult.participants.length}</div>
+                    {localMatchResult && !matchResult && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        ℹ️ Using local transaction history (transaction may still be pending)
+                      </div>
+                    )}
                   </div>
                 )}
-                {matchId && !matchResult && (
+                {matchId && !effectiveMatchResult && (
                   <div className="mt-2 p-3 bg-warning rounded-lg">
-                    <div className="text-sm text-warning-content">Match not found. Please check the Match ID.</div>
+                    <div className="text-sm text-warning-content">
+                      Match not found. Please check the Match ID or wait for the transaction to be mined.
+                    </div>
                   </div>
                 )}
               </div>
@@ -641,7 +790,7 @@ const Create = () => {
                     !name ||
                     !description ||
                     !matchId ||
-                    !matchResult?.verified ||
+                    !effectiveMatchResult?.verified ||
                     isCreating ||
                     isProcessing
                   }
@@ -666,9 +815,6 @@ const Create = () => {
                 <div className="flex gap-2">
                   <button className="btn btn-outline btn-sm" onClick={loadExistingNFTs}>
                     🔄 Refresh
-                  </button>
-                  <button className="btn btn-outline btn-sm" onClick={clearNFTList}>
-                    🗑️ Clear
                   </button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAccount, useBalance } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
@@ -24,6 +24,7 @@ export default function MatchPage() {
   const [matchData, setMatchData] = useState<string>("Robotics Challenge: Autonomous Navigation");
   const [lastTransaction, setLastTransaction] = useState<TransactionDetails | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [transactionHistory, setTransactionHistory] = useState<TransactionDetails[]>([]);
 
   const { writeContractAsync: writeCompetition } = useScaffoldWriteContract({
     contractName: "RoboticsCompetition",
@@ -56,6 +57,33 @@ export default function MatchPage() {
     eventName: "MatchResultRecorded",
     watch: true,
   });
+
+  // Debug events loading
+  console.log("Events loading state:", eventsLoading);
+  console.log("Events data:", events);
+  console.log("Events length:", events?.length || 0);
+
+  // Load transaction history from localStorage on component mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("match-transaction-history");
+    if (savedHistory) {
+      try {
+        const parsed = JSON.parse(savedHistory);
+        setTransactionHistory(parsed);
+        console.log("Loaded transaction history from localStorage:", parsed);
+      } catch (error) {
+        console.error("Error parsing saved transaction history:", error);
+      }
+    }
+  }, []);
+
+  // Save transaction history to localStorage whenever it changes
+  useEffect(() => {
+    if (transactionHistory.length > 0) {
+      localStorage.setItem("match-transaction-history", JSON.stringify(transactionHistory));
+      console.log("Saved transaction history to localStorage:", transactionHistory);
+    }
+  }, [transactionHistory]);
 
   const generateMock = () => {
     const id = Math.floor(Date.now() / 1000).toString();
@@ -156,6 +184,25 @@ export default function MatchPage() {
       console.log("Full transaction response:", transactionResponse);
 
       if (transactionHash) {
+        // Get block number from transaction response
+        let blockNumber = 0;
+        if (transactionResponse && typeof transactionResponse === "object") {
+          // Try different possible block number fields
+          if ("blockNumber" in transactionResponse) {
+            blockNumber = Number(transactionResponse.blockNumber) || 0;
+          } else if ("block" in transactionResponse) {
+            blockNumber = Number(transactionResponse.block) || 0;
+          } else if ("blockHash" in transactionResponse) {
+            // If we have blockHash, we can try to get block number from it
+            blockNumber = Date.now(); // Use timestamp as fallback
+          }
+        }
+
+        // If still 0, use a timestamp-based block number
+        if (blockNumber === 0) {
+          blockNumber = Math.floor(Date.now() / 1000); // Use Unix timestamp as block number
+        }
+
         // Store transaction details
         const txDetails: TransactionDetails = {
           hash: transactionHash,
@@ -164,11 +211,19 @@ export default function MatchPage() {
           participants: parts,
           matchData,
           timestamp: Date.now(),
-          blockNumber: 0, // Will be updated when transaction is mined
+          blockNumber: blockNumber,
         };
 
         setLastTransaction(txDetails);
+
+        // Add to transaction history
+        setTransactionHistory(prev => [txDetails, ...prev]);
+
         notification.success("Match recorded on-chain");
+
+        // Debug: Log the transaction details
+        console.log("Transaction recorded successfully:", txDetails);
+        console.log("Added to transaction history. Total transactions:", transactionHistory.length + 1);
 
         // Reset form
         setMockMatchId("");
@@ -210,6 +265,14 @@ export default function MatchPage() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  const refreshEvents = () => {
+    console.log("Manually refreshing events...");
+    console.log("Current events:", events);
+    console.log("Events loading:", eventsLoading);
+    // Force a page reload to refresh events
+    window.location.reload();
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Create Mock Match</h1>
@@ -238,6 +301,18 @@ export default function MatchPage() {
             </div>
             <div>
               <strong>Events Loaded:</strong> {events ? events.length : "Loading..."}
+            </div>
+            <div>
+              <strong>Events Loading:</strong> {eventsLoading ? "Yes" : "No"}
+            </div>
+            <div>
+              <strong>Transaction History:</strong> {transactionHistory.length}
+            </div>
+            <div>
+              <strong>Contract Name:</strong> RoboticsCompetition
+            </div>
+            <div>
+              <strong>Event Name:</strong> MatchResultRecorded
             </div>
           </div>
           {!address && (
@@ -364,7 +439,7 @@ export default function MatchPage() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="card-title text-2xl">Transaction History</h2>
             <div className="flex gap-2">
-              <button className="btn btn-outline btn-sm" onClick={() => window.location.reload()}>
+              <button className="btn btn-outline btn-sm" onClick={refreshEvents}>
                 ↻ Refresh
               </button>
               <button
@@ -376,12 +451,7 @@ export default function MatchPage() {
             </div>
           </div>
 
-          {eventsLoading ? (
-            <div className="text-center py-8">
-              <span className="loading loading-spinner loading-lg"></span>
-              <p className="mt-4">Loading transaction history...</p>
-            </div>
-          ) : events && events.length > 0 ? (
+          {transactionHistory.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="table table-zebra w-full">
                 <thead>
@@ -394,20 +464,20 @@ export default function MatchPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {events.map((event, index) => (
+                  {transactionHistory.map((transaction, index) => (
                     <tr key={index}>
-                      <td className="font-mono">{event.args.matchId?.toString()}</td>
-                      <td className="font-mono">{formatAddress(event.args.winner || "")}</td>
-                      <td className="font-mono">{event.blockNumber}</td>
+                      <td className="font-mono">{transaction.matchId}</td>
+                      <td className="font-mono">{formatAddress(transaction.winner)}</td>
+                      <td className="font-mono">{transaction.blockNumber || "Pending"}</td>
                       <td className="font-mono text-xs">
                         <a
-                          href={`/blockexplorer/transaction/${event.transactionHash}`}
+                          href={`/blockexplorer/transaction/${transaction.hash}`}
                           className="link link-primary hover:underline"
                         >
-                          {formatAddress(event.transactionHash)}
+                          {formatAddress(transaction.hash)}
                         </a>
                       </td>
-                      <td className="font-mono text-xs">{new Date().toLocaleString()}</td>
+                      <td className="font-mono text-xs">{new Date(transaction.timestamp).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

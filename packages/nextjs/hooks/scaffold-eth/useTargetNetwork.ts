@@ -22,7 +22,7 @@ export function useTargetNetwork(): { targetNetwork: ChainWithAttributes } {
         setTargetNetwork({ ...newSelectedNetwork, ...NETWORKS_EXTRA_DATA[newSelectedNetwork.id] });
       }
     }
-  }, [chain?.id, setTargetNetwork, targetNetwork.id]);
+  }, [chain?.id, setTargetNetwork]);
 
   return useMemo(() => ({ targetNetwork }), [targetNetwork]);
 }

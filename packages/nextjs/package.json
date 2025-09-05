@@ -5,12 +5,12 @@
   "scripts": {
     "build": "next build",
     "check-types": "tsc --noEmit --incremental",
-    "dev": "next dev",
+    "dev": "next dev --port 3000 --hostname localhost",
     "format": "prettier --write . '!(node_modules|.next|contracts)/**/*'",
     "ipfs": "NEXT_PUBLIC_IPFS_BUILD=true yarn build && yarn bgipfs upload config init -u https://upload.bgipfs.com && CID=$(yarn bgipfs upload out | grep -o 'CID: [^ ]*' | cut -d' ' -f2) && [ ! -z \"$CID\" ] && echo '🚀 Upload complete! Your site is now available at: https://community.bgipfs.com/ipfs/'$CID || echo '❌ Upload failed'",
     "lint": "next lint",
     "serve": "next start",
-    "start": "next dev",
+    "start": "next dev --port 3000 --hostname localhost",
     "vercel": "vercel --build-env YARN_ENABLE_IMMUTABLE_INSTALLS=false --build-env ENABLE_EXPERIMENTAL_COREPACK=1 --build-env VERCEL_TELEMETRY_DISABLED=1",
     "vercel:login": "vercel login",
     "vercel:yolo": "vercel --build-env YARN_ENABLE_IMMUTABLE_INSTALLS=false --build-env ENABLE_EXPERIMENTAL_COREPACK=1 --build-env NEXT_PUBLIC_IGNORE_BUILD_ERROR=true --build-env VERCEL_TELEMETRY_DISABLED=1"
@@ -18,6 +18,8 @@
   "dependencies": {
     "@heroicons/react": "~2.1.5",
     "@rainbow-me/rainbowkit": "2.2.7",
+    "@swc/core": "^1.13.5",
+    "@swc/helpers": "^0.5.17",
     "@tanstack/react-query": "~5.59.15",
     "@uniswap/sdk-core": "~5.8.2",
     "@uniswap/v2-sdk": "~4.6.1",

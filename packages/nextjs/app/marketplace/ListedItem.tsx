@@ -22,6 +22,9 @@ interface ListedItem {
   totalPrice: bigint;
   price: bigint;
   itemId: bigint;
+  nft: string;
+  tokenId: number;
+  seller: string;
   name: string;
   description: string;
   image: string;
@@ -88,6 +91,50 @@ export default function MyListedItems() {
     contractName: "Marketplace",
   });
 
+  // Fallback function to load listed items from localStorage
+  const loadFromLocalStorage = useCallback(() => {
+    console.log("Loading listed items from localStorage as fallback...");
+    try {
+      const keys = Object.keys(localStorage);
+      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata"));
+      const fallbackItems: ListedItem[] = [];
+
+      nftKeys.forEach(key => {
+        try {
+          const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          if (nftData.name && nftData.description && nftData.transactionHash) {
+            // Only show NFTs created by the connected wallet
+            if (nftData.creator && account && nftData.creator.toLowerCase() === account.toLowerCase()) {
+              // Create a listed item from localStorage data
+              const fallbackItem: ListedItem = {
+                totalPrice: parseEther(nftData.price || "0.01"),
+                price: parseEther(nftData.price || "0.01"),
+                itemId: BigInt(nftData.tokenId || 1),
+                nft: "0x0000000000000000000000000000000000000000", // Placeholder
+                tokenId: nftData.tokenId || 1,
+                seller: nftData.creator || account || "",
+                sold: false,
+                name: nftData.name,
+                description: nftData.description,
+                image: nftData.image || "/placeholder-image.png",
+              };
+              fallbackItems.push(fallbackItem);
+            }
+          }
+        } catch (error) {
+          console.log("Error parsing localStorage NFT data:", error);
+        }
+      });
+
+      console.log("Fallback listed items loaded:", fallbackItems);
+      if (fallbackItems.length > 0) {
+        setListedItems(fallbackItems);
+      }
+    } catch (error) {
+      console.log("Error loading from localStorage:", error);
+    }
+  }, [account]);
+
   const loadListedItems = useCallback(async () => {
     if (!account || !itemCount) return;
 
@@ -100,9 +147,14 @@ export default function MyListedItems() {
       for (let index = 1; index <= Number(itemCount); index++) {
         try {
           // Get item from marketplace
-          const item = await fetch(`/api/marketplace/item/${index}`).then(res => res.json());
+          const response = await fetch(`/api/marketplace/item/${index}`);
+          if (!response.ok) {
+            console.log(`ListedItem: Item ${index} not found or error:`, response.status);
+            continue;
+          }
+          const item = await response.json();
 
-          if (item.seller.toLowerCase() === account.toLowerCase()) {
+          if (item.seller && item.seller.toLowerCase() === account.toLowerCase()) {
             // Get NFT metadata from IPFS
             const response = await fetch(item.tokenURI);
             const metadata = await response.json();
@@ -112,6 +164,9 @@ export default function MyListedItems() {
               totalPrice: item.totalPrice || item.price,
               price: item.price,
               itemId: BigInt(index),
+              nft: item.nft || "0x0000000000000000000000000000000000000000",
+              tokenId: item.tokenId || index,
+              seller: item.seller || account || "",
               name: metadata.name || "Unknown NFT",
               description: metadata.description || "No description",
               image: metadata.image || "/placeholder-image.png",
@@ -132,13 +187,21 @@ export default function MyListedItems() {
 
       setListedItems(items);
       setSoldItems(sold);
+
+      // If no items found from marketplace, try localStorage fallback
+      if (items.length === 0 && sold.length === 0) {
+        console.log("No listed items found in marketplace, trying localStorage fallback...");
+        loadFromLocalStorage();
+      }
     } catch (error) {
       console.log("Error loading listed items:", error);
       notification.error("Failed to load listed items");
+      // Try localStorage fallback on error
+      loadFromLocalStorage();
     } finally {
       setLoading(false);
     }
-  }, [account, itemCount]);
+  }, [account, itemCount, loadFromLocalStorage]);
 
   const loadOwnedNFTs = () => {
     try {
