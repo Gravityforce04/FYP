@@ -58,7 +58,7 @@ contract Marketplace is ReentrancyGuard {
         feePercent = _feePercent;
     }
 
-    // List NFT without transferring (keeps NFT in wallet)
+    // List NFT by transferring to marketplace contract
     function listNFT(IERC721 _nft, uint _tokenId, uint _price) external {
         require(_price > 0, "Price must be greater than zero");
         require(_nft.ownerOf(_tokenId) == msg.sender, "You don't own this NFT");
@@ -77,6 +77,9 @@ contract Marketplace is ReentrancyGuard {
         
         sellerItems[msg.sender].push(itemCount);
         
+        // Transfer NFT from seller to marketplace contract
+        _nft.transferFrom(msg.sender, address(this), _tokenId);
+        
         emit Listed(
             itemCount,
             address(_nft),
@@ -86,13 +89,16 @@ contract Marketplace is ReentrancyGuard {
         );
     }
 
-    // Unlist NFT
+    // Unlist NFT and transfer back to seller
     function unlistNFT(uint _itemId) external {
         Item storage item = items[_itemId];
         require(item.seller == msg.sender, "Not your item");
         require(item.listed && !item.sold, "Item not listed or already sold");
         
         item.listed = false;
+        
+        // Transfer NFT back to seller
+        item.nft.transferFrom(address(this), msg.sender, item.tokenId);
         
         emit Unlisted(
             _itemId,
@@ -112,8 +118,8 @@ contract Marketplace is ReentrancyGuard {
         uint totalPrice = getTotalPrice(_itemId);
         require(msg.value >= totalPrice, "Insufficient payment for price + fees");
         
-        // Transfer NFT from seller to buyer
-        item.nft.transferFrom(item.seller, msg.sender, item.tokenId);
+        // Transfer NFT from marketplace contract to buyer
+        item.nft.transferFrom(address(this), msg.sender, item.tokenId);
         
         // Pay seller and fees
         item.seller.transfer(item.price);

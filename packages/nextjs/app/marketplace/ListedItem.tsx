@@ -155,29 +155,67 @@ export default function MyListedItems() {
           const item = await response.json();
 
           if (item.seller && item.seller.toLowerCase() === account.toLowerCase()) {
-            // Get NFT metadata from IPFS
-            const response = await fetch(item.tokenURI);
-            const metadata = await response.json();
+            // Verify that the NFT is actually in the marketplace contract
+            try {
+              const { createPublicClient, http } = await import("viem");
+              const { localhost } = await import("viem/chains");
 
-            // Create listed item object
-            const listedItem: ListedItem = {
-              totalPrice: item.totalPrice || item.price,
-              price: item.price,
-              itemId: BigInt(index),
-              nft: item.nft || "0x0000000000000000000000000000000000000000",
-              tokenId: item.tokenId || index,
-              seller: item.seller || account || "",
-              name: metadata.name || "Unknown NFT",
-              description: metadata.description || "No description",
-              image: metadata.image || "/placeholder-image.png",
-              sold: item.sold || false,
-            };
+              const publicClient = createPublicClient({
+                chain: localhost,
+                transport: http("http://127.0.0.1:8545"),
+              });
 
-            items.push(listedItem);
+              const contracts = await import("~~/contracts/deployedContracts");
+              const nftAddress = contracts.default[31337].NFT.address;
+              const marketplaceAddress = contracts.default[31337].Marketplace.address;
 
-            // Add to sold items if sold
-            if (item.sold) {
-              sold.push(listedItem);
+              // Check who actually owns the NFT
+              const actualOwner = await publicClient.readContract({
+                address: nftAddress as `0x${string}`,
+                abi: contracts.default[31337].NFT.abi,
+                functionName: "ownerOf",
+                args: [BigInt(item.tokenId)],
+              });
+
+              console.log(`ListedItem: Item ${index} - Listed owner: ${item.seller}, Actual owner: ${actualOwner}`);
+
+              // Only show if the NFT is actually in the marketplace contract
+              if (actualOwner.toLowerCase() === marketplaceAddress.toLowerCase()) {
+                // Get NFT metadata from IPFS
+                const response = await fetch(item.tokenURI);
+                const metadata = await response.json();
+
+                // Create listed item object
+                const listedItem: ListedItem = {
+                  totalPrice: item.totalPrice || item.price,
+                  price: item.price,
+                  itemId: BigInt(index),
+                  nft: item.nft || "0x0000000000000000000000000000000000000000",
+                  tokenId: item.tokenId || index,
+                  seller: item.seller || account || "",
+                  name: metadata.name || "Unknown NFT",
+                  description: metadata.description || "No description",
+                  image: metadata.image || "/placeholder-image.png",
+                  sold: item.sold || false,
+                };
+
+                items.push(listedItem);
+                console.log(`✅ ListedItem: Added item ${index} to list (verified in marketplace contract)`);
+
+                // Add to sold items if sold
+                if (item.sold) {
+                  sold.push(listedItem);
+                }
+              } else {
+                console.log(
+                  `❌ ListedItem: Item ${index} not in marketplace contract (owner: ${actualOwner}), skipping`,
+                );
+                console.log(
+                  `🔧 This indicates the listNFT transaction failed - NFT was not transferred to marketplace`,
+                );
+              }
+            } catch (ownershipError) {
+              console.log(`ListedItem: Error verifying ownership for item ${index}:`, ownershipError);
             }
           }
         } catch (error) {
@@ -310,11 +348,59 @@ export default function MyListedItems() {
     );
   }
 
+  // Debug function to check NFT ownership
+  const debugNFTOwnership = async (tokenId: number) => {
+    try {
+      const { createPublicClient, http } = await import("viem");
+      const { localhost } = await import("viem/chains");
+
+      const publicClient = createPublicClient({
+        chain: localhost,
+        transport: http("http://127.0.0.1:8545"),
+      });
+
+      // Get contract addresses from deployed contracts
+      const contracts = await import("~~/contracts/deployedContracts");
+      const nftAddress = contracts.default[31337].NFT.address;
+      const marketplaceAddress = contracts.default[31337].Marketplace.address;
+
+      const owner = await publicClient.readContract({
+        address: nftAddress as `0x${string}`,
+        abi: contracts.default[31337].NFT.abi,
+        functionName: "ownerOf",
+        args: [BigInt(tokenId)],
+      });
+
+      const isInMarketplace =
+        owner && typeof owner === "string" && owner.toLowerCase() === marketplaceAddress.toLowerCase();
+
+      console.log("🔍 ListedItem NFT Ownership Debug:");
+      console.log(`  Token ID: ${tokenId}`);
+      console.log(`  Current Owner: ${owner}`);
+      console.log(`  Marketplace Address: ${marketplaceAddress}`);
+      console.log(`  Is in Marketplace: ${isInMarketplace ? "✅ YES" : "❌ NO"}`);
+
+      return { owner, isInMarketplace };
+    } catch (error) {
+      console.log("❌ Error checking NFT ownership:", error);
+    }
+  };
+
   return (
     <div className="flex justify-center">
       {listedItems.length > 0 ? (
         <div className="px-5 py-3 container mx-auto">
-          <h2 className="text-2xl font-bold mb-4">Your Listed Items</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold">Your Listed Items</h2>
+            <div className="flex gap-2">
+              <button className="btn btn-sm btn-outline" onClick={() => debugNFTOwnership(1)}>
+                🔍 Debug Token 1
+              </button>
+              <button className="btn btn-sm btn-outline" onClick={() => debugNFTOwnership(2)}>
+                🔍 Debug Token 2
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 py-3">
             {listedItems.map((item, idx) => (
               <div key={idx} className="overflow-hidden">

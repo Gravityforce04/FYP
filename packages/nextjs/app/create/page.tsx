@@ -216,6 +216,9 @@ const Create = () => {
   // Function to get the actual token ID from the blockchain
   const getActualTokenId = async (transactionHash: string): Promise<number> => {
     try {
+      console.log("🔍 Getting actual token ID for transaction:", transactionHash);
+      console.log("Available mint events:", mintEvents?.length || 0);
+
       // Try to get token ID from mint events
       if (mintEvents && mintEvents.length > 0) {
         const mintEvent = mintEvents.find(
@@ -224,15 +227,20 @@ const Create = () => {
             event.args.from === "0x0000000000000000000000000000000000000000",
         );
         if (mintEvent && mintEvent.args.tokenId) {
+          console.log("✅ Found token ID from mint event:", Number(mintEvent.args.tokenId));
           return Number(mintEvent.args.tokenId);
         }
       }
 
-      // Fallback: use current token count - 1 (since it's incremented after minting)
-      return tokenCount ? Number(tokenCount) - 1 : 1;
+      // Fallback: use current token count - 1 (since tokenCount is the next token to be minted)
+      const fallbackTokenId = tokenCount ? Number(tokenCount) - 1 : 1;
+      console.log("⚠️ Using fallback token ID:", fallbackTokenId);
+      return fallbackTokenId;
     } catch (error) {
-      console.log("Error getting actual token ID:", error);
-      return tokenCount ? Number(tokenCount) - 1 : 1;
+      console.log("❌ Error getting actual token ID:", error);
+      const fallbackTokenId = tokenCount ? Number(tokenCount) - 1 : 1;
+      console.log("⚠️ Using fallback token ID after error:", fallbackTokenId);
+      return fallbackTokenId;
     }
   };
 
@@ -411,7 +419,46 @@ const Create = () => {
     return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
   };
 
-  // Manual marketplace listing function
+  // Debug function to check NFT ownership
+  const checkNFTOwnership = async (tokenId: number) => {
+    if (!nftContractInfo?.address || !marketplaceContractInfo?.address) {
+      console.log("❌ Contract addresses not found");
+      return;
+    }
+
+    try {
+      // Use public client to read contract
+      const { createPublicClient, http } = await import("viem");
+      const { localhost } = await import("viem/chains");
+
+      const publicClient = createPublicClient({
+        chain: localhost,
+        transport: http("http://127.0.0.1:8545"),
+      });
+
+      const owner = await publicClient.readContract({
+        address: nftContractInfo.address as `0x${string}`,
+        abi: nftContractInfo.abi,
+        functionName: "ownerOf",
+        args: [BigInt(tokenId)],
+      });
+
+      const isInMarketplace =
+        owner && typeof owner === "string" && owner.toLowerCase() === marketplaceContractInfo.address.toLowerCase();
+
+      console.log("🔍 NFT Ownership Debug:");
+      console.log(`  Token ID: ${tokenId}`);
+      console.log(`  Current Owner: ${owner}`);
+      console.log(`  Marketplace Address: ${marketplaceContractInfo.address}`);
+      console.log(`  Is in Marketplace: ${isInMarketplace ? "✅ YES" : "❌ NO"}`);
+
+      return { owner, isInMarketplace };
+    } catch (error) {
+      console.log("❌ Error checking NFT ownership:", error);
+    }
+  };
+
+  // Manual marketplace listing function with debug
   const listNFTOnMarketplace = async (tokenId: number, price: string) => {
     if (!nftContractInfo?.address || !marketplaceContractInfo?.address) {
       notification.error("Contract addresses not found. Cannot list NFT.");
@@ -419,33 +466,56 @@ const Create = () => {
     }
 
     try {
-      // First approve the marketplace
-      console.log("Approving marketplace to transfer NFT...");
-      console.log("NFT Contract:", nftContractInfo.address);
-      console.log("Marketplace Contract:", marketplaceContractInfo.address);
-      console.log("Token ID:", tokenId);
+      console.log("🚀 Starting NFT Listing Process...");
+      console.log("📋 Listing Details:");
+      console.log(`  Token ID: ${tokenId}`);
+      console.log(`  Price: ${price} ETH`);
+      console.log(`  NFT Contract: ${nftContractInfo.address}`);
+      console.log(`  Marketplace Contract: ${marketplaceContractInfo.address}`);
 
+      // Check ownership before listing
+      console.log("🔍 Checking ownership BEFORE listing...");
+      const beforeOwner = await checkNFTOwnership(tokenId);
+
+      // First approve the marketplace
+      console.log("✅ Step 1: Approving marketplace to transfer NFT...");
       await writeNFTContract({
         functionName: "approve",
         args: [marketplaceContractInfo.address, BigInt(tokenId)],
-        gas: BigInt(100000), // Reduced gas limit for approve
+        gas: BigInt(200000), // Increased gas for approve
       });
       notification.success("NFT approved for marketplace transfer!");
 
       // Wait for approval
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // List on marketplace
-      console.log("Listing NFT on marketplace...");
+      console.log("✅ Step 2: Listing NFT on marketplace...");
       await writeMarketplaceContract({
         functionName: "listNFT",
         args: [nftContractInfo.address, BigInt(tokenId), parseEther(price)],
-        gas: BigInt(300000), // Reduced gas limit for listNFT
+        gas: BigInt(500000), // Increased gas for listNFT
       });
+
+      // Wait for transaction to complete
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Check ownership after listing
+      console.log("🔍 Checking ownership AFTER listing...");
+      const afterOwner = await checkNFTOwnership(tokenId);
+
+      console.log("📊 Listing Summary:");
+      console.log(
+        `  Before: ${beforeOwner?.owner} (${beforeOwner?.isInMarketplace ? "In Marketplace" : "In User Wallet"})`,
+      );
+      console.log(
+        `  After: ${afterOwner?.owner} (${afterOwner?.isInMarketplace ? "In Marketplace" : "In User Wallet"})`,
+      );
+      console.log(`  Transfer Successful: ${afterOwner?.isInMarketplace ? "✅ YES" : "❌ NO"}`);
 
       notification.success("NFT listed on marketplace successfully!");
     } catch (error) {
-      console.log("Manual marketplace listing error:", error);
+      console.log("❌ Manual marketplace listing error:", error);
       notification.error("Failed to list NFT on marketplace. Check console for details.");
     }
   };
@@ -463,6 +533,8 @@ const Create = () => {
     }
 
     console.log("Loading NFTs for connected wallet:", connectedAddress);
+    console.log("Current token count:", tokenCount);
+    console.log("Available mint events:", mintEvents?.length || 0);
 
     try {
       // Load real NFT data from localStorage first (these are the actual created NFTs)
@@ -490,6 +562,7 @@ const Create = () => {
 
               // Try to get the correct token ID from mint events
               if (mintEvents && mintEvents.length > 0) {
+                console.log(`🔍 Looking for mint event for transaction: ${nftData.transactionHash}`);
                 const mintEvent = mintEvents.find(
                   event =>
                     event.transactionHash === nftData.transactionHash &&
@@ -497,15 +570,22 @@ const Create = () => {
                 );
                 if (mintEvent && mintEvent.args.tokenId) {
                   const correctTokenId = Number(mintEvent.args.tokenId);
+                  console.log(`✅ Found mint event for ${nftData.name}: Token ID ${correctTokenId}`);
                   if (nftData.tokenId !== correctTokenId) {
                     console.log(
-                      `Auto-correcting token ID for ${nftData.name}: ${nftData.tokenId} -> ${correctTokenId}`,
+                      `🔄 Auto-correcting token ID for ${nftData.name}: ${nftData.tokenId} -> ${correctTokenId}`,
                     );
                     nftData.tokenId = correctTokenId;
                     // Update the localStorage record
                     localStorage.setItem(key, JSON.stringify(nftData));
+                  } else {
+                    console.log(`✅ Token ID already correct for ${nftData.name}: ${nftData.tokenId}`);
                   }
+                } else {
+                  console.log(`⚠️ No mint event found for ${nftData.name} with transaction ${nftData.transactionHash}`);
                 }
+              } else {
+                console.log(`⚠️ No mint events available for token ID correction`);
               }
               realNFTs.push(nftData);
             }
