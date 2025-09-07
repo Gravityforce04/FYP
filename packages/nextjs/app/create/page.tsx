@@ -219,7 +219,7 @@ const Create = () => {
       console.log("🔍 Getting actual token ID for transaction:", transactionHash);
       console.log("Available mint events:", mintEvents?.length || 0);
 
-      // Try to get token ID from mint events
+      // Try to get token ID from mint events first
       if (mintEvents && mintEvents.length > 0) {
         const mintEvent = mintEvents.find(
           event =>
@@ -232,7 +232,53 @@ const Create = () => {
         }
       }
 
-      // Fallback: use current token count - 1 (since tokenCount is the next token to be minted)
+      // If mint events don't work, try to get token ID by querying the blockchain directly
+      try {
+        const { createPublicClient, http, decodeEventLog } = await import("viem");
+        const { localhost } = await import("viem/chains");
+
+        const publicClient = createPublicClient({
+          chain: localhost,
+          transport: http("http://127.0.0.1:8545"),
+        });
+
+        // Get the transaction receipt to find the Transfer event
+        const receipt = await publicClient.getTransactionReceipt({
+          hash: transactionHash as `0x${string}`,
+        });
+
+        if (receipt && receipt.logs) {
+          // Find the Transfer event in the logs
+          for (const log of receipt.logs) {
+            try {
+              // Decode the Transfer event
+              const decoded = decodeEventLog({
+                abi: nftContractInfo?.abi || [],
+                data: log.data,
+                topics: log.topics,
+              });
+
+              if (decoded.eventName === "Transfer" && decoded.args) {
+                const { from, to, tokenId } = decoded.args as any;
+                if (
+                  from === "0x0000000000000000000000000000000000000000" &&
+                  to !== "0x0000000000000000000000000000000000000000"
+                ) {
+                  console.log("✅ Found token ID from transaction receipt:", Number(tokenId));
+                  return Number(tokenId);
+                }
+              }
+            } catch {
+              // Skip logs that can't be decoded
+              continue;
+            }
+          }
+        }
+      } catch (blockchainError) {
+        console.log("❌ Error querying blockchain for token ID:", blockchainError);
+      }
+
+      // Final fallback: use current token count - 1 (since tokenCount is the next token to be minted)
       const fallbackTokenId = tokenCount ? Number(tokenCount) - 1 : 1;
       console.log("⚠️ Using fallback token ID:", fallbackTokenId);
       return fallbackTokenId;
@@ -657,6 +703,69 @@ const Create = () => {
     }
   }, [nftContractInfo?.address, connectedAddress]);
 
+  // Function to fix token IDs for existing NFTs
+  const fixTokenIds = useCallback(async () => {
+    if (!connectedAddress) {
+      notification.error("Please connect your wallet first");
+      return;
+    }
+
+    console.log("🔧 FIXING TOKEN IDs FOR EXISTING NFTs");
+    console.log("=".repeat(50));
+
+    try {
+      const keys = Object.keys(localStorage);
+      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata"));
+      let fixedCount = 0;
+
+      for (const key of nftKeys) {
+        try {
+          const nftData = JSON.parse(localStorage.getItem(key) || "{}");
+          if (nftData.name && nftData.description && nftData.transactionHash) {
+            // Only fix NFTs created by the connected wallet
+            if (nftData.creator && nftData.creator.toLowerCase() === connectedAddress.toLowerCase()) {
+              console.log(`🔍 Fixing token ID for: ${nftData.name}`);
+              console.log(`  Current token ID: ${nftData.tokenId}`);
+              console.log(`  Transaction hash: ${nftData.transactionHash}`);
+
+              // Get the correct token ID from blockchain
+              const correctTokenId = await getActualTokenId(nftData.transactionHash);
+
+              if (correctTokenId !== nftData.tokenId) {
+                console.log(`  ✅ Updating token ID from ${nftData.tokenId} to ${correctTokenId}`);
+
+                // Update the localStorage entry
+                nftData.tokenId = correctTokenId;
+                localStorage.setItem(key, JSON.stringify(nftData));
+                fixedCount++;
+              } else {
+                console.log(`  ✅ Token ID ${correctTokenId} is already correct`);
+              }
+            }
+          }
+        } catch (error) {
+          console.log(`❌ Error fixing token ID for key ${key}:`, error);
+        }
+      }
+
+      console.log(`✅ Fixed ${fixedCount} token IDs`);
+      console.log("=".repeat(50));
+
+      if (fixedCount > 0) {
+        notification.success(`Fixed ${fixedCount} token IDs! Refreshing the list...`);
+        // Refresh the NFT list
+        setTimeout(() => {
+          loadExistingNFTs();
+        }, 1000);
+      } else {
+        notification.info("All token IDs are already correct!");
+      }
+    } catch (error) {
+      console.log("❌ Error fixing token IDs:", error);
+      notification.error("Failed to fix token IDs. Check console for details.");
+    }
+  }, [connectedAddress, getActualTokenId, loadExistingNFTs]);
+
   // Auto-load existing NFTs when component mounts and contracts are available
   useEffect(() => {
     if (nftContractInfo?.address) {
@@ -895,6 +1004,9 @@ const Create = () => {
                 <div className="flex gap-2">
                   <button className="btn btn-outline btn-sm" onClick={loadExistingNFTs}>
                     🔄 Refresh
+                  </button>
+                  <button className="btn btn-outline btn-sm" onClick={fixTokenIds}>
+                    🔧 Fix Token IDs
                   </button>
                 </div>
               </div>
