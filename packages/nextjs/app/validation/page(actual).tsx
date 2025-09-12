@@ -1,31 +1,85 @@
 // "use client";
 
-// import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
-// import { useState } from "react";
+// import { useEffect, useState } from "react";
+// import { useRouter } from "next/navigation";
+// import { Hash, Transaction, TransactionReceipt, formatEther, formatUnits } from "viem";
+// import { hardhat } from "viem/chains";
+// import { usePublicClient } from "wagmi";
 // import { Address } from "~~/components/scaffold-eth";
+// import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
+// import { decodeTransactionData, getFunctionDetails } from "~~/utils/scaffold-eth";
+// import { replacer } from "~~/utils/scaffold-eth/common";
+// //import {txDetails } from "~~/app/match/page";
 
-// const CompetitionsPage = () => {
-//   const [matchId, setMatchId] = useState("");
+// interface TransactionDetails {
+//   hash: string;
+//   matchId: string;
+//   winner: string;
+//   participants: string[];
+//   matchData: string;
+//   timestamp: number;
+//   blockNumber: number;
+// }
+
+// const CompetitionsPage = ({ txHash }: { txHash: Hash }) => {
+//   const [transactionAddress, setTransactionAddress] = useState("");
 //   const [isVerifying, setIsVerifying] = useState(false);
 //   const [verificationResult, setVerificationResult] = useState<any>(null);
 
-//   const { data: matchResult, refetch: refetchMatchResult } = useScaffoldReadContract({
-//     contractName: "RoboticsCompetition",
-//     functionName: "getMatchResult",
-//     args: [matchId ? BigInt(matchId) : BigInt(0)],
-//   });
+//   const client = usePublicClient({ chainId: hardhat.id });
+//   const router = useRouter();
+//   const [transaction, setTransaction] = useState<Transaction>();
+//   const [receipt, setReceipt] = useState<TransactionReceipt>();
+//   const [functionCalled, setFunctionCalled] = useState<string>();
+
+//   const [transactionVerify, setTransactionVerify] = useState<TransactionDetails[]>([]);
+
+//   const { targetNetwork } = useTargetNetwork();
+
+//   useEffect(() => {
+//     if (txHash && client) {
+//       const fetchTransaction = async () => {
+//         const tx = await client.getTransaction({ hash: txHash });
+//         const receipt = await client.getTransactionReceipt({ hash: txHash });
+
+//         const transactionWithDecodedData = decodeTransactionData(tx);
+//         setTransaction(transactionWithDecodedData);
+//         setReceipt(receipt);
+
+//         const functionCalled = transactionWithDecodedData.input.substring(0, 10);
+//         setFunctionCalled(functionCalled);
+//       };
+
+//       fetchTransaction();
+//     }
+//   }, [client, txHash])
+
+//   // For testing, we'll use a mock match result since we're not using matchId anymore
+//   const mockMatchResult = {
+//     verified: true,
+//     winner: "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+//     participants: [
+//       "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+//       "0x1234567890123456789012345678901234567890",
+//       "0xabcdef1234567890abcdef1234567890abcdef12",
+//     ],
+//     timestamp: Math.floor(Date.now() / 1000),
+//     matchData: "Robotics Competition Match - Autonomous Navigation Challenge",
+//   };
 
 //   const handleVerification = async () => {
-//     if (!matchId) {
-//       alert("Please enter a Match ID");
+//     if (!transactionAddress) {
+//       alert("Please enter a Transaction Address");
 //       return;
 //     }
 
 //     setIsVerifying(true);
 //     try {
-//       // Refetch the latest data from blockchain
-//       await refetchMatchResult();
-//       setVerificationResult(matchResult);
+//       // Simulate verification delay
+//       await new Promise(resolve => setTimeout(resolve, 1000));
+
+//       // For testing, we'll use the mock result
+//       setVerificationResult(mockMatchResult);
 //     } catch (error) {
 //       console.error("Verification failed:", error);
 //     } finally {
@@ -41,6 +95,10 @@
 //     return `https://sepolia.arbiscan.io/tx/${txHash}`;
 //   };
 
+//   const isValidTransactionAddress = (address: string) => {
+//     return /^0x[a-fA-F0-9]{40}$/.test(address);
+//   };
+
 //   return (
 //     <div className="container mx-auto px-4 py-8">
 //       <h1 className="text-4xl font-bold text-center mb-8">🏆 Competition Results Verification</h1>
@@ -50,42 +108,79 @@
 //           <div className="card-body">
 //             <div className="form-control">
 //               <label className="label">
-//                 <span className="label-text text-lg font-semibold">Enter Match ID to verify:</span>
+//                 <span className="label-text text-lg font-semibold">Enter Transaction Address for verification:</span>
 //               </label>
 //               <div className="flex gap-4">
 //                 <input
-//                   type="number"
-//                   placeholder="Enter Match ID (e.g., 1, 2, 3...)"
+//                   type="text"
+//                   placeholder="Enter Transaction Hash (0x...)"
 //                   className="input input-bordered flex-1"
-//                   value={matchId}
-//                   onChange={(e) => setMatchId(e.target.value)}
+//                   value={transactionAddress}
+//                   onChange={e => setTransactionAddress(e.target.value)}
 //                 />
 //                 <button
-//                   className={`btn btn-primary ${isVerifying ? 'loading' : ''}`}
+//                   className={`btn btn-primary ${isVerifying ? "loading" : ""}`}
 //                   onClick={handleVerification}
-//                   disabled={!matchId || isVerifying}
+//                   disabled={!transactionAddress || isVerifying}
 //                 >
-//                   {isVerifying ? 'Verifying...' : '🔍 Verify Match'}
+//                   {isVerifying ? "Verifying..." : "�� Verify Transaction"}
 //                 </button>
 //               </div>
+//               {transactionAddress && !isValidTransactionAddress(transactionAddress) && (
+//                 <label className="label">
+//                   <span className="label-text-alt text-error">Invalid transaction address format</span>
+//                 </label>
+//               )}
 //             </div>
 //           </div>
 //         </div>
 
-//         {/* Verification Results */}
-//         {verificationResult && verificationResult.verified && (
+//         {/* Transaction Information */}
+//         {transactionAddress && isValidTransactionAddress(transactionAddress) && (
 //           <div className="card bg-base-100 shadow-xl mt-6">
 //             <div className="card-body">
-//               <h2 className="card-title text-2xl">✅ Match #{matchId} Verified</h2>
+//               <h2 className="card-title text-xl">🔗 Transaction Details</h2>
+//               <div className="space-y-3">
+//                 <p>
+//                   <strong>Transaction Hash:</strong>
+//                 </p>
+//                 <div className="flex items-center gap-2">
+//                   <code className="bg-base-300 px-2 py-1 rounded text-sm break-all">{transactionAddress}</code>
+//                   <a
+//                     href={getTransactionUrl(transactionAddress)}
+//                     target="_blank"
+//                     rel="noopener noreferrer"
+//                     className="btn btn-outline btn-sm"
+//                   >
+//                     🔗 View on Arbiscan
+//                   </a>
+//                 </div>
+//               </div>
+//             </div>
+//           </div>
+//         )}
+
+//         {/* Verification Results */}
+//         {verificationResult && verificationResult.verified && transaction ? (
+//           <div className="card bg-base-100 shadow-xl mt-6">
+//             <div className="card-body">
+//               <h2 className="card-title text-2xl">✅ Competition Results Verified</h2>
 
 //               <div className="grid md:grid-cols-2 gap-6 mt-4">
 //                 {/* Match Details */}
 //                 <div className="space-y-3">
-//                   <h3 className="text-lg font-semibold text-primary">Match Information</h3>
+//                   <h3 className="text-lg font-semibold text-primary">Competition Information</h3>
 //                   <div className="space-y-2">
-//                     <p><strong>Status:</strong> <span className="badge badge-success">Verified</span></p>
-//                     <p><strong>Timestamp:</strong> {new Date(Number(verificationResult.timestamp) * 1000).toLocaleString()}</p>
-//                     <p><strong>Match Data:</strong> {verificationResult.matchData}</p>
+//                     <p>
+//                       <strong>Status:</strong> <span className="badge badge-success">Verified</span>
+//                     </p>
+//                     <p>
+//                       <strong>Timestamp:</strong>{" "}
+//                       {new Date(Number(verificationResult.timestamp) * 1000).toLocaleString()}
+//                     </p>
+//                     <p>
+//                       <strong>Match Data:</strong> {getFunctionDetails(transaction)}
+//                     </p>
 //                   </div>
 //                 </div>
 
@@ -93,8 +188,10 @@
 //                 <div className="space-y-3">
 //                   <h3 className="text-lg font-semibold text-success">🏆 Winner</h3>
 //                   <div className="space-y-2">
-//                     <p><strong>Address:</strong></p>
-//                     <Address address={verificationResult.winner} />
+//                     <p>
+//                       <strong>Address:</strong>
+//                     </p>
+//                     <Address address={transaction?.from} />
 //                     <a
 //                       href={getArbiscanUrl(verificationResult.winner)}
 //                       target="_blank"
@@ -109,7 +206,7 @@
 
 //               {/* Participants List */}
 //               <div className="mt-6">
-//                 <h3 className="text-lg font-semibold text-info mb-3">👥 Participants</h3>
+//                 <h3 className="text-lg font-semibold text-info mb-3">�� Participants</h3>
 //                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
 //                   {verificationResult.participants.map((participant: string, index: number) => (
 //                     <div key={index} className="card bg-base-200 p-3">
@@ -166,31 +263,38 @@
 //               </div>
 //             </div>
 //           </div>
-//         )}
-
-//         {/* No Match Found */}
-//         {verificationResult && !verificationResult.verified && matchId && (
-//           <div className="alert alert-warning mt-6">
-//             <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-//               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-//             </svg>
-//             <div>
-//               <h3 className="font-bold">Match Not Found</h3>
-//               <div className="text-xs">Match ID {matchId} was not found or is not verified on the blockchain.</div>
-//             </div>
-//           </div>
-//         )}
+//         ) : (
+//         <p className="text-2xl text-base-content">Loading...</p>
+//       )}
 
 //         {/* Instructions */}
 //         <div className="mt-8 p-6 bg-base-200 rounded-lg">
 //           <h3 className="text-xl font-semibold mb-4">📋 How to Verify Competition Results</h3>
 //           <ol className="list-decimal list-inside space-y-2 text-sm">
-//             <li><strong>Enter Match ID:</strong> Input the Match ID you want to verify</li>
-//             <li><strong>Click Verify:</strong> Press the "Verify Match" button to check blockchain data</li>
-//             <li><strong>View Results:</strong> See verified match information and participant details</li>
-//             <li><strong>Blockchain Verification:</strong> Use Arbiscan links to verify data on-chain</li>
-//             <li><strong>Contract Interaction:</strong> View the smart contract that stores this data</li>
+//             <li>
+//               <strong>Enter Transaction Address:</strong> Input any valid Ethereum transaction hash (0x...)
+//             </li>
+//             <li>
+//               <strong>Click Verify:</strong> Press the Verify Transaction button to simulate verification
+//             </li>
+//             <li>
+//               <strong>View Results:</strong> See sample competition information and participant details
+//             </li>
+//             <li>
+//               <strong>Blockchain Verification:</strong> Use Arbiscan links to explore the blockchain
+//             </li>
+//             <li>
+//               <strong>Contract Interaction:</strong> View the smart contract that stores competition data
+//             </li>
 //           </ol>
+
+//           <div className="mt-4 p-3 bg-base-300 rounded">
+//             <p className="text-sm font-semibold">�� Testing Mode:</p>
+//             <p className="text-sm">
+//               This is a demonstration version. Enter any valid transaction hash (0x followed by 40 hex characters) to
+//               see sample competition results.
+//             </p>
+//           </div>
 //         </div>
 //       </div>
 //     </div>
