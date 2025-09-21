@@ -30,7 +30,7 @@ export const Footer = () => {
               </svg>
             </a>
             <a href="https://discord.com/" target="_blank" rel="noreferrer" className="btn btn-ghost">
-              <svg viewBox="0 0 24 24" width="22" height="22" className="fill-current">
+              <svg viewBox="3 0 16 16" width="22" height="22" className="fill-current">
                 <path d="M20.317 4.369A19.791 19.791 0 0 0 16.558 3c-.2.36-.434.848-.595 1.231a18.27 18.27 0 0 0-4.926 0A12.26 12.26 0 0 0 10.442 3a19.736 19.736 0 0 0-3.761 1.369C3.97 7.194 3.275 10.13 3.5 13.027A19.9 19.9 0 0 0 7.14 15c.29-.4.55-.83.78-1.28a12.86 12.86 0 0 0 1.48.18c.5.04 1 .06 1.5.06s1-.02 1.5-.06c.51-.04 1.01-.1 1.51-.18.23.45.49.88.78 1.28a19.86 19.86 0 0 0 3.64-1.973c.29-3.146-.57-6.053-2.952-8.487Z"></path>
               </svg>
             </a>
