@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Hash, Transaction, TransactionReceipt, formatEther } from "viem";
-import { hardhat } from "viem/chains";
+import { Hash, Transaction, TransactionReceipt, decodeEventLog, formatEther } from "viem";
 import { usePublicClient } from "wagmi";
 import { Address } from "~~/components/scaffold-eth";
+import deployedContracts from "~~/contracts/deployedContracts";
+import scaffoldConfig from "~~/scaffold.config";
 import { decodeTransactionData } from "~~/utils/scaffold-eth";
 
 const CompetitionsPage = () => {
@@ -13,7 +14,10 @@ const CompetitionsPage = () => {
   const [verificationResult, setVerificationResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const client = usePublicClient({ chainId: hardhat.id });
+  // Use the configured target network (Arbitrum Sepolia)
+  const targetNetwork = scaffoldConfig.targetNetworks[0];
+  const client = usePublicClient({ chainId: targetNetwork.id });
+
   const [transaction, setTransaction] = useState<Transaction>();
   const [receipt, setReceipt] = useState<TransactionReceipt>();
 
@@ -53,60 +57,82 @@ const CompetitionsPage = () => {
       setTransaction(transactionWithDecodedData);
       setReceipt(receipt);
 
-      // Check if this is a RoboticsCompetition contract interaction
-      const roboticsContractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-      const isRoboticsContract = tx.to?.toLowerCase() === roboticsContractAddress.toLowerCase();
+      // Get RoboticsCompetition contract address for the current chain
+      const chainId = targetNetwork.id;
+      // @ts-ignore - Dynamic access to deployedContracts
+      const deployedContract = deployedContracts[chainId]?.RoboticsCompetition;
+      const roboticsContractAddress = deployedContract?.address;
+
+      if (!roboticsContractAddress) {
+        console.warn("RoboticsCompetition contract not found for this chain");
+      }
+
+      const isRoboticsContract =
+        roboticsContractAddress && tx.to?.toLowerCase() === roboticsContractAddress.toLowerCase();
 
       if (isRoboticsContract) {
-        // Try to extract match ID from transaction logs or data
-        // For now, we'll use a default match ID and fetch the result
-        const matchId = BigInt(1); // This could be extracted from transaction data
+        let matchId = BigInt(0);
+        let foundMatchId = false;
 
-        try {
-          const matchResult = await client.readContract({
-            address: roboticsContractAddress as `0x${string}`,
-            abi: [
-              {
-                inputs: [{ internalType: "uint256", name: "_matchId", type: "uint256" }],
-                name: "getMatchResult",
-                outputs: [
-                  {
-                    components: [
-                      { internalType: "uint256", name: "matchId", type: "uint256" },
-                      { internalType: "address", name: "winner", type: "address" },
-                      { internalType: "address[]", name: "participants", type: "address[]" },
-                      { internalType: "uint256", name: "timestamp", type: "uint256" },
-                      { internalType: "string", name: "matchData", type: "string" },
-                      { internalType: "bool", name: "verified", type: "bool" },
-                    ],
-                    internalType: "struct RoboticsCompetition.MatchResult",
-                    name: "",
-                    type: "tuple",
-                  },
-                ],
-                stateMutability: "view",
-                type: "function",
-              },
-            ],
-            functionName: "getMatchResult",
-            args: [matchId],
-          });
+        // Try to extract match ID from transaction logs
+        for (const log of receipt.logs) {
+          try {
+            if (log.address.toLowerCase() === roboticsContractAddress.toLowerCase()) {
+              const decodedLog = decodeEventLog({
+                abi: deployedContract.abi,
+                data: log.data,
+                topics: log.topics,
+              });
 
-          setVerificationResult({
-            verified: matchResult.verified,
-            winner: matchResult.winner,
-            participants: matchResult.participants,
-            timestamp: Number(matchResult.timestamp),
-            matchData: matchResult.matchData,
-            matchId: Number(matchResult.matchId),
-            transactionHash: transactionAddress,
-            blockNumber: receipt.blockNumber,
-            gasUsed: receipt.gasUsed,
-            status: receipt.status,
-          });
-        } catch (contractError) {
-          console.error("Error reading contract:", contractError);
-          // Fallback to basic transaction verification
+              if (decodedLog.eventName === "MatchResultRecorded") {
+                // @ts-ignore
+                matchId = decodedLog.args.matchId;
+                foundMatchId = true;
+                break;
+              }
+            }
+          } catch (e) {
+            console.log("Error parsing log:", e);
+          }
+        }
+
+        if (foundMatchId) {
+          try {
+            const matchResult = await client.readContract({
+              address: roboticsContractAddress as `0x${string}`,
+              abi: deployedContract.abi,
+              functionName: "getMatchResult",
+              args: [matchId],
+            });
+
+            // @ts-ignore
+            setVerificationResult({
+              verified: matchResult.verified,
+              // @ts-ignore
+              winner: matchResult.winner,
+              // @ts-ignore
+              participants: matchResult.participants,
+              // @ts-ignore
+              timestamp: Number(matchResult.timestamp),
+              // @ts-ignore
+              matchData: matchResult.matchData,
+              // @ts-ignore
+              matchId: Number(matchResult.matchId),
+              transactionHash: transactionAddress,
+              blockNumber: receipt.blockNumber,
+              gasUsed: receipt.gasUsed,
+              status: receipt.status,
+              isRoboticsContract: true,
+              from: tx.from,
+              to: tx.to,
+              value: tx.value,
+            });
+          } catch (contractError) {
+            console.error("Error reading contract:", contractError);
+            throw new Error("Failed to read match result from contract");
+          }
+        } else {
+          // Transaction to contract but no MatchResultRecorded event found
           setVerificationResult({
             verified: receipt.status === "success",
             transactionHash: transactionAddress,
@@ -116,7 +142,8 @@ const CompetitionsPage = () => {
             from: tx.from,
             to: tx.to,
             value: tx.value,
-            isRoboticsContract: false,
+            isRoboticsContract: true,
+            note: "Transaction interacted with contract but no MatchResultRecorded event was found.",
           });
         }
       } else {
@@ -141,12 +168,8 @@ const CompetitionsPage = () => {
     }
   };
 
-  const getArbiscanUrl = (address: string) => {
-    return `https://sepolia.arbiscan.io/address/${address}`;
-  };
-
-  const getHardhatExplorerUrl = (txHash: string) => {
-    return `http://localhost:3000/blockexplorer/transaction/${txHash}`;
+  const getArbiscanUrl = (address: string, type: "address" | "tx" = "address") => {
+    return `https://sepolia.arbiscan.io/${type}/${address}`;
   };
 
   return (
@@ -204,34 +227,28 @@ const CompetitionsPage = () => {
                 <div className="flex items-center gap-2">
                   <code className="bg-base-300 px-2 py-1 rounded text-sm break-all">{transactionAddress}</code>
                   <a
-                    href={getHardhatExplorerUrl(transactionAddress)}
+                    href={getArbiscanUrl(transactionAddress, "tx")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline btn-sm"
                   >
-                    🔗 View on Block Explorer
+                    🔗 View on Arbiscan
                   </a>
                 </div>
                 {transaction && (
                   <div className="mt-4 space-y-2">
                     <div>
-                      <strong>From:</strong> <Address address={transaction.from} />
+                      <strong>From (Sender):</strong> <Address address={transaction.from} />
                     </div>
                     <div>
-                      <strong>To:</strong>{" "}
+                      <strong>To (Receiver):</strong>{" "}
                       {transaction.to ? <Address address={transaction.to} /> : <span>Contract Creation</span>}
                     </div>
                     <p>
                       <strong>Value:</strong> {formatEther(transaction.value)} ETH
                     </p>
-                    <p>
-                      <strong>Gas Limit:</strong> {transaction.gas.toString()}
-                    </p>
                     {receipt && (
                       <>
-                        <p>
-                          <strong>Gas Used:</strong> {receipt.gasUsed.toString()}
-                        </p>
                         <p>
                           <strong>Block Number:</strong> {receipt.blockNumber.toString()}
                         </p>
@@ -260,78 +277,53 @@ const CompetitionsPage = () => {
                 {verificationResult.verified ? "✅ Transaction Verified" : "❌ Transaction Failed"}
               </h2>
 
-              {verificationResult.isRoboticsContract !== false ? (
+              {verificationResult.isRoboticsContract ? (
                 // RoboticsCompetition contract interaction
                 <div className="grid md:grid-cols-2 gap-6 mt-4">
                   {/* Match Details */}
                   <div className="space-y-3">
                     <h3 className="text-lg font-semibold text-primary">Competition Information</h3>
                     <div className="space-y-2">
-                      <p>
-                        <strong>Status:</strong> <span className="badge badge-success">Verified</span>
-                      </p>
-                      <p>
-                        <strong>Match ID:</strong> {verificationResult.matchId}
-                      </p>
-                      <p>
-                        <strong>Timestamp:</strong>{" "}
-                        {new Date(Number(verificationResult.timestamp) * 1000).toLocaleString()}
-                      </p>
-                      <p>
-                        <strong>Match Data:</strong> {verificationResult.matchData}
-                      </p>
+                      {verificationResult.matchId !== undefined ? (
+                        <>
+                          <p>
+                            <strong>Status:</strong> <span className="badge badge-success">Verified</span>
+                          </p>
+                          <p>
+                            <strong>Match ID:</strong> {verificationResult.matchId}
+                          </p>
+                          <p>
+                            <strong>Timestamp:</strong>{" "}
+                            {new Date(Number(verificationResult.timestamp) * 1000).toLocaleString()}
+                          </p>
+                          <p>
+                            <strong>Match Data:</strong> {verificationResult.matchData}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-warning">{verificationResult.note}</p>
+                      )}
                     </div>
                   </div>
 
                   {/* Winner Information */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-success">🏆 Winner</h3>
-                    <div className="space-y-2">
-                      <p>
-                        <strong>Address:</strong>
-                      </p>
-                      <Address address={verificationResult.winner} />
+                  {verificationResult.winner && (
+                    <div className="space-y-3">
+                      <h3 className="text-lg font-semibold text-success">🏆 Winner</h3>
+                      <div className="space-y-2">
+                        <p>
+                          <strong>Address:</strong>
+                        </p>
+                        <Address address={verificationResult.winner} />
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 // General transaction verification
                 <div className="space-y-4 mt-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-primary">Transaction Status</h3>
-                      <p>
-                        <strong>Status:</strong>
-                        <span
-                          className={`badge ml-2 ${verificationResult.status === "success" ? "badge-success" : "badge-error"}`}
-                        >
-                          {verificationResult.status}
-                        </span>
-                      </p>
-                      <p>
-                        <strong>Block Number:</strong> {verificationResult.blockNumber.toString()}
-                      </p>
-                      <p>
-                        <strong>Gas Used:</strong> {verificationResult.gasUsed.toString()}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-info">Transaction Details</h3>
-                      <div>
-                        <strong>From:</strong> <Address address={verificationResult.from} />
-                      </div>
-                      <div>
-                        <strong>To:</strong>{" "}
-                        {verificationResult.to ? (
-                          <Address address={verificationResult.to} />
-                        ) : (
-                          <span>Contract Creation</span>
-                        )}
-                      </div>
-                      <div>
-                        <strong>Value:</strong> {formatEther(verificationResult.value)} ETH
-                      </div>
-                    </div>
+                  <div className="alert alert-info">
+                    <span>This transaction is not a RoboticsCompetition match record.</span>
                   </div>
                 </div>
               )}
@@ -362,31 +354,6 @@ const CompetitionsPage = () => {
                   </div>
                 </div>
               )}
-
-              {/* Blockchain Verification Links */}
-              <div className="mt-6 p-4 bg-base-200 rounded-lg">
-                <h3 className="text-lg font-semibold text-accent mb-3">🔗 Blockchain Verification</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="font-semibold mb-2">Contract Address</h4>
-                    <p className="text-sm mb-2">RoboticsCompetition Contract:</p>
-                    <Address address="0x5FbDB2315678afecb367f032d93F642f64180aa3" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-2">Network Information</h4>
-                    <p className="text-sm mb-2">Hardhat Local Network</p>
-                    <p className="text-sm mb-2">Chain ID: 31337</p>
-                    <a
-                      href={getHardhatExplorerUrl(verificationResult.transactionHash)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-outline btn-sm"
-                    >
-                      🌐 View on Block Explorer
-                    </a>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -410,21 +377,9 @@ const CompetitionsPage = () => {
               contract, you&apos;ll see match results
             </li>
             <li>
-              <strong>General Transactions:</strong> For other transactions, you&apos;ll see basic verification
-              information
-            </li>
-            <li>
-              <strong>Blockchain Verification:</strong> Use the block explorer links to explore the transaction on-chain
+              <strong>Blockchain Verification:</strong> Use the Arbiscan links to explore the transaction on-chain
             </li>
           </ol>
-
-          <div className="mt-4 p-3 bg-base-300 rounded">
-            <p className="text-sm font-semibold">🧪 Testing Mode:</p>
-            <p className="text-sm">
-              This page fetches real transaction data from the blockchain and verifies it against the
-              RoboticsCompetition smart contract. Enter any valid transaction hash to see the verification results.
-            </p>
-          </div>
         </div>
       </div>
     </div>

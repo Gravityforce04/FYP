@@ -50,7 +50,8 @@ const Create = () => {
   const [mintedTokenId, setMintedTokenId] = useState<number | null>(null);
   const [createdNFTs, setCreatedNFTs] = useState<CreatedNFT[]>([]);
   const [lastTransactionHash, setLastTransactionHash] = useState<string>("");
-  const [chainResetDetected, setChainResetDetected] = useState(false);
+
+  const [ipfsHash, setIpfsHash] = useState("");
 
   // Get connected wallet address
   const { address: connectedAddress } = useAccount();
@@ -155,56 +156,73 @@ const Create = () => {
     setIsUploading(true);
 
     try {
-      // Convert file to base64 data URL for persistent storage
+      // 1. Show preview immediately
       const reader = new FileReader();
       reader.onload = e => {
         const base64DataUrl = e.target?.result as string;
-        console.log("Image uploaded, base64 data URL length:", base64DataUrl.length);
-        console.log("Image preview URL:", base64DataUrl.substring(0, 50) + "...");
         setImage(base64DataUrl);
-        notification.success("Image uploaded successfully! Preview available.");
-        setIsUploading(false);
-      };
-      reader.onerror = () => {
-        notification.error("Failed to read image file");
-        setIsUploading(false);
       };
       reader.readAsDataURL(file);
+
+      // 2. Upload to Pinata via API
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/ipfs", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log("Image uploaded to IPFS:", data);
+        setIpfsHash(data.IpfsHash);
+        notification.success("Image uploaded to IPFS successfully!");
+      } else {
+        throw new Error(data.error || "Failed to upload to IPFS");
+      }
     } catch (error) {
       console.log("Image upload error: ", error);
-      notification.error("Failed to upload image");
+      notification.error("Failed to upload image to IPFS");
+    } finally {
       setIsUploading(false);
     }
   };
 
   const uploadMetadataToIPFS = async (metadata: NFTMetadata): Promise<string> => {
     try {
-      // Create a more efficient metadata approach
-      // Store the full metadata locally and use a reference URI on-chain
-      const metadataId = `nft-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Ensure we have an IPFS hash for the image
+      if (!ipfsHash) {
+        throw new Error("Image not uploaded to IPFS yet");
+      }
 
-      // Don't store large metadata in localStorage to avoid quota exceeded error
-
-      // Create a lightweight on-chain metadata URI that references the stored data
-      const lightweightMetadata = {
-        name: metadata.name,
-        description: metadata.description,
-        image:
-          "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5GVCBJbWFnZTwvdGV4dD48L3N2Zz4=", // Placeholder SVG
-        external_url: `https://app.localhost/metadata/${metadataId}`,
-        attributes: metadata.attributes,
+      const ipfsMetadata = {
+        ...metadata,
+        image: `ipfs://${ipfsHash}`,
+        external_url: `https://ipfs.io/ipfs/${ipfsHash}`, // Or your app URL
       };
 
-      // Create a data URL for the lightweight metadata
-      const metadataString = JSON.stringify(lightweightMetadata);
-      const metadataUri = `data:application/json;base64,${btoa(metadataString)}`;
+      const formData = new FormData();
+      formData.append("metadata", JSON.stringify(ipfsMetadata));
 
-      console.log("Lightweight metadata URI length:", metadataUri.length);
-      notification.success("Metadata prepared with optimized storage");
-      return metadataUri;
+      const response = await fetch("/api/ipfs", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log("Metadata uploaded to IPFS:", data);
+        return `ipfs://${data.IpfsHash}`;
+      } else {
+        throw new Error(data.error || "Failed to upload metadata to IPFS");
+      }
     } catch (error) {
       console.log("IPFS metadata preparation error: ", error);
-      // Fallback to simple format
+      notification.error("Failed to upload metadata to IPFS");
+      // Fallback to simple format if API fails (for testing without keys)
       return "data:application/json;base64,eyJuYW1lIjoiVGVzdCIsImRlc2NyaXB0aW9uIjoiVGVzdCBOZnQifQ==";
     }
   };
@@ -566,15 +584,6 @@ const Create = () => {
     }
   };
 
-  const clearHistory = () => {
-    const keys = Object.keys(localStorage);
-    const nftKeys = keys.filter(key => key.startsWith("nft-"));
-    nftKeys.forEach(key => localStorage.removeItem(key));
-    setCreatedNFTs([]);
-    setChainResetDetected(false);
-    notification.success("Local history cleared");
-  };
-
   // Use a ref to access the latest mintEvents without triggering re-renders of loadExistingNFTs
   const mintEventsRef = useRef(mintEvents);
   useEffect(() => {
@@ -794,25 +803,6 @@ const Create = () => {
     }
   }, [nftContractInfo?.address, tokenCount, loadExistingNFTs]);
 
-  // Separate effect for chain reset detection to avoid infinite loops
-  useEffect(() => {
-    if (tokenCount === undefined) return;
-
-    const checkChainReset = () => {
-      const keys = Object.keys(localStorage);
-      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata"));
-
-      if (nftKeys.length > 0 && tokenCount === 0n) {
-        console.log("⚠️ Chain reset detected: Local items exist but tokenCount is 0");
-        setChainResetDetected(true);
-      } else {
-        setChainResetDetected(false);
-      }
-    };
-
-    checkChainReset();
-  }, [tokenCount]);
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
@@ -835,35 +825,6 @@ const Create = () => {
           </div>
         </div>
       </div>
-
-      {/* Chain Reset Warning */}
-      {chainResetDetected && (
-        <div className="alert alert-warning shadow-lg mb-6">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="stroke-current flex-shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-          <div>
-            <h3 className="font-bold">Chain Reset Detected!</h3>
-            <div className="text-xs">
-              We found local history of NFTs but the blockchain seems to be empty (Token Count: 0). This usually happens
-              when the local blockchain is restarted.
-            </div>
-          </div>
-          <button className="btn btn-sm btn-error" onClick={clearHistory}>
-            Clear Local History
-          </button>
-        </div>
-      )}
 
       {/* Success Message */}
       {lastTransactionHash && (

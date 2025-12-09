@@ -33,7 +33,7 @@ contract RoboticsCompetition is Ownable {
         string memory _matchData
     ) external {
         require(matchResults[_matchId].matchId == 0, "Match already recorded");
-        
+
         matchResults[_matchId] = MatchResult({
             matchId: _matchId,
             winner: _winner,

@@ -17,6 +17,16 @@
 
 ![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
 
+## Deployment Information (Arbitrum Sepolia)
+
+The contracts have been successfully deployed to the Arbitrum Sepolia Testnet.
+
+| Contract Name | Address |
+|---|---|
+| **RoboticsCompetition** | `0xe760AEf9b270Ae57C3efB684110bb854b56FF9E0` |
+| **Marketplace** | `0x4caAd228483AECe7eEdf0e51A13b27cfE2783e46` |
+| **NFT** | `0x7782A464603247638C94A4376398Ce09AF5354D7` |
+
 ## Requirements
 
 Before you begin, you need to install the following tools:
