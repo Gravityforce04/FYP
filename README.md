@@ -1,25 +1,18 @@
-# 🏗 Robotics Esports
+# 🤖 Robotics eSports Platform
 
-<h4 align="center">
-  <a href="https://docs.scaffoldeth.io">Documentation</a> |
-  <a href="https://scaffoldeth.io">Website</a>
-</h4>
+A decentralized platform for autonomous robot competitions, NFT trading, and on-chain result verification. Built on Ethereum (Arbitrum Sepolia).
 
-🧪 An open-source, up-to-date toolkit for building decentralized applications (dapps) on the Ethereum blockchain. It's designed to make it easier for developers to create and deploy smart contracts and build user interfaces that interact with those contracts.
+## 🌟 Features
 
-⚙️ Built using NextJS, RainbowKit, Hardhat, Wagmi, Viem, and Typescript.
+- **Create & Mint**: Design and mint unique autonomous robot NFTs with specific attributes and metadata.
+- **Marketplace**: Buy, sell, and trade high-performance robots and rare parts in a decentralized marketplace.
+- **Competition & Match**: Record match results on-chain to create an immutable history of performance.
+- **Validation**: Verify the integrity of match results and winner status using transaction hashes and on-chain data.
+- **Interactive UI**: Premium user interface with live updates, educational components, and seamless wallet integration.
 
-- ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
-- 🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
-- 🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
-- 🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
-- 🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
+## 🚀 Deployment Information (Arbitrum Sepolia)
 
-![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
-
-## Deployment Information (Arbitrum Sepolia)
-
-The contracts have been successfully deployed to the Arbitrum Sepolia Testnet.
+The smart contracts are deployed on the Arbitrum Sepolia Testnet:
 
 | Contract Name | Address |
 |---|---|
@@ -27,64 +20,38 @@ The contracts have been successfully deployed to the Arbitrum Sepolia Testnet.
 | **Marketplace** | `0x4caAd228483AECe7eEdf0e51A13b27cfE2783e46` |
 | **NFT** | `0x7782A464603247638C94A4376398Ce09AF5354D7` |
 
-## Requirements
+## 🛠 Tech Stack
 
-Before you begin, you need to install the following tools:
+- **Frontend**: NextJS, TailwindCSS, DaisyUI, Framer Motion
+- **Blockchain**: Hardhat, Wagmi, Viem
+- **Language**: TypeScript, Solidity
 
-- [Node (>= v20.18.3)](https://nodejs.org/en/download/)
-- Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
-- [Git](https://git-scm.com/downloads)
+## 🏁 Getting Started
 
-## Quickstart
+1. **Install Dependencies**
+   ```bash
+   yarn install
+   ```
 
-To get started with Robotics Esports, follow the steps below:
+2. **Run Local Network (Optional for testing)**
+   ```bash
+   yarn chain
+   ```
 
-1. Install dependencies if it was skipped in CLI:
+3. **Deploy Contracts (Local)**
+   ```bash
+   yarn deploy
+   ```
 
-```
-cd my-dapp-example
-yarn install
-```
+4. **Start Frontend**
+   ```bash
+   yarn start
+   ```
 
-2. Run a local network in the first terminal:
+Visit your app on: `http://localhost:3000`
 
-```
-yarn chain
-```
+## 📚 Documentation
 
-This command starts a local Ethereum network using Hardhat. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/hardhat/hardhat.config.ts`.
-
-3. On a second terminal, deploy the test contract:
-
-```
-yarn deploy
-```
-
-This command deploys a test smart contract to the local network. The contract is located in `packages/hardhat/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/hardhat/deploy` to deploy the contract to the network. You can also customize the deploy script.
-
-4. On a third terminal, start your NextJS app:
-
-```
-yarn start
-```
-
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
-
-Run smart contract test with `yarn hardhat:test`
-
-- Edit your smart contracts in `packages/hardhat/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/hardhat/deploy`
-
-
-## Documentation
-
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Robotics Esports.
-
-To know more about its features, check out our [website](https://scaffoldeth.io).
-
-## Contributing to Robotics Esports
-
-We welcome contributions to Robotics Esports!
-
-Please see [CONTRIBUTING.MD](https://github.com/scaffold-eth/scaffold-eth-2/blob/main/CONTRIBUTING.md) for more information and guidelines for contributing to Robotics Esports.
+- **Validation**: Check the `/validation` page to learn how to verify match results.
+- **Create**: Use the `/create` page to mint your first robot.
+- **Marketplace**: Explore `/marketplace` to trade assets.

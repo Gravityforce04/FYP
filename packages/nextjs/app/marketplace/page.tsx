@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import MyListedItems from "./ListedItem";
+import { motion } from "framer-motion";
 import { formatEther, parseEther } from "viem";
 import { useAccount } from "wagmi";
 import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
@@ -176,108 +177,86 @@ function BrowseNFTs() {
 
     try {
       setLoading(true);
-      const items: NFTItem[] = [];
       console.log("Starting to load items from marketplace...");
 
-      // Load all available NFTs
-      for (let index = 1; index <= Number(itemCount); index++) {
+      // Create an array of indices to fetch
+      const indices = Array.from({ length: Number(itemCount) }, (_, i) => i + 1);
+
+      // Fetch all items in parallel
+      const itemPromises = indices.map(async index => {
         try {
-          console.log(`Loading item ${index}...`);
           // Get item from marketplace
           const response = await fetch(`/api/marketplace/item/${index}`);
-          console.log(`API response for item ${index}:`, response.status);
 
-          if (!response.ok) {
-            console.log(`Item ${index} not found or error:`, response.status);
-            continue;
-          }
+          if (!response.ok) return null;
 
           const item = await response.json();
-          console.log(`Item ${index} data:`, item);
 
-          if (!item.sold) {
-            // Verify that the NFT is actually in the marketplace contract
-            try {
-              const { createPublicClient, http } = await import("viem");
-              const { localhost } = await import("viem/chains");
+          if (item.sold) return null;
 
-              const publicClient = createPublicClient({
-                chain: localhost,
-                transport: http("http://127.0.0.1:8545"),
-              });
+          // Verify ownership and get metadata
+          const { createPublicClient, http } = await import("viem");
+          const { localhost } = await import("viem/chains");
+          const contracts = await import("~~/contracts/deployedContracts");
 
-              // Get contract addresses
-              const contracts = await import("~~/contracts/deployedContracts");
-              const nftAddress = contracts.default[31337].NFT.address;
-              const marketplaceAddress = contracts.default[31337].Marketplace.address;
+          const publicClient = createPublicClient({
+            chain: localhost,
+            transport: http("http://127.0.0.1:8545"),
+          });
 
-              // Check who actually owns the NFT
-              const actualOwner = await publicClient.readContract({
-                address: nftAddress as `0x${string}`,
-                abi: contracts.default[31337].NFT.abi,
-                functionName: "ownerOf",
-                args: [BigInt(item.tokenId)],
-              });
+          const nftAddress = contracts.default[31337].NFT.address;
+          const marketplaceAddress = contracts.default[31337].Marketplace.address;
 
-              console.log(`Item ${index} - Listed owner: ${item.seller}, Actual owner: ${actualOwner}`);
+          const actualOwner = await publicClient.readContract({
+            address: nftAddress as `0x${string}`,
+            abi: contracts.default[31337].NFT.abi,
+            functionName: "ownerOf",
+            args: [BigInt(item.tokenId)],
+          });
 
-              // Only show if the NFT is actually in the marketplace contract
-              if (actualOwner.toLowerCase() === marketplaceAddress.toLowerCase()) {
-                // Get NFT metadata from IPFS
-                try {
-                  const metadataResponse = await fetch(item.tokenURI);
-                  const metadata = await metadataResponse.json();
-                  console.log(`Metadata for item ${index}:`, metadata);
+          if (actualOwner.toLowerCase() !== marketplaceAddress.toLowerCase()) {
+            return null;
+          }
 
-                  // Create NFT item object
-                  const nftItem: NFTItem = {
-                    itemId: BigInt(index),
-                    nft: item.nft,
-                    tokenId: BigInt(item.tokenId),
-                    price: BigInt(item.price), // Convert string back to BigInt
-                    seller: item.seller,
-                    sold: item.sold,
-                    name: metadata.name || "Unknown NFT",
-                    description: metadata.description || "No description",
-                    image: metadata.image || "/placeholder-image.png",
-                  };
+          // Get metadata
+          try {
+            const metadataResponse = await fetch(item.tokenURI);
+            const metadata = await metadataResponse.json();
 
-                  items.push(nftItem);
-                  console.log(`✅ Added item ${index} to list (verified in marketplace contract)`);
-                } catch (metadataError) {
-                  console.log(`Error loading metadata for item ${index}:`, metadataError);
-                }
-              } else {
-                console.log(`❌ Item ${index} not in marketplace contract (owner: ${actualOwner}), skipping`);
-                console.log(
-                  `🔧 This indicates the listNFT transaction failed - NFT was not transferred to marketplace`,
-                );
-              }
-            } catch (ownershipError) {
-              console.log(`Error verifying ownership for item ${index}:`, ownershipError);
-            }
-          } else {
-            console.log(`Item ${index} is already sold`);
+            return {
+              itemId: BigInt(index),
+              nft: item.nft,
+              tokenId: BigInt(item.tokenId),
+              price: BigInt(item.price),
+              seller: item.seller,
+              sold: item.sold,
+              name: metadata.name || "Unknown NFT",
+              description: metadata.description || "No description",
+              image: metadata.image || "/placeholder-image.png",
+            } as NFTItem;
+          } catch (error) {
+            console.log(`Error loading metadata for item ${index}:`, error);
+            return null;
           }
         } catch (error) {
           console.log(`Error loading item ${index}:`, error);
+          return null;
         }
-      }
+      });
+
+      const results = await Promise.all(itemPromises);
+      const items = results.filter((item): item is NFTItem => item !== null);
 
       console.log("Final items loaded:", items);
       setNftItems(items);
 
-      // If no items found from marketplace, try loading from localStorage as fallback
       if (items.length === 0) {
-        console.log("No items found in marketplace, trying localStorage fallback...");
         loadFromLocalStorage();
       }
     } catch (error) {
       console.log("Error loading NFT items:", error);
-      // Try localStorage fallback on error
       loadFromLocalStorage();
     } finally {
-      console.log("Setting loading to false");
       setLoading(false);
     }
   }, [itemCount, loadFromLocalStorage]);
@@ -315,7 +294,13 @@ function BrowseNFTs() {
       {nftItems.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 py-3">
           {nftItems.map((item, idx) => (
-            <div key={idx} className="overflow-hidden">
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: idx * 0.05 }}
+              className="overflow-hidden"
+            >
               <div className="card bg-base-100 shadow-xl hover:shadow-2xl transition-shadow duration-300">
                 <figure>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -352,7 +337,7 @@ function BrowseNFTs() {
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       ) : (

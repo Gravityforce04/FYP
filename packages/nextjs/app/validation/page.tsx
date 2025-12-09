@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Hash, Transaction, TransactionReceipt, decodeEventLog, formatEther } from "viem";
 import { usePublicClient } from "wagmi";
+import { BlockchainScanner101 } from "~~/components/BlockchainScanner101";
 import { Address } from "~~/components/scaffold-eth";
 import deployedContracts from "~~/contracts/deployedContracts";
 import scaffoldConfig from "~~/scaffold.config";
@@ -358,28 +359,39 @@ const CompetitionsPage = () => {
           </div>
         )}
 
-        {/* Instructions */}
-        <div className="mt-8 p-6 bg-base-200 rounded-lg">
-          <h3 className="text-xl font-semibold mb-4">📋 How to Verify Competition Results</h3>
-          <ol className="list-decimal list-inside space-y-2 text-sm">
-            <li>
-              <strong>Enter Transaction Hash:</strong> Input a valid Ethereum transaction hash (0x followed by 64 hex
-              characters)
-            </li>
-            <li>
-              <strong>Click Verify:</strong> Press the Verify Transaction button to fetch and verify the transaction
-            </li>
-            <li>
-              <strong>View Results:</strong> See real transaction details and verification results
-            </li>
-            <li>
-              <strong>RoboticsCompetition Contracts:</strong> If the transaction interacts with the RoboticsCompetition
-              contract, you&apos;ll see match results
-            </li>
-            <li>
-              <strong>Blockchain Verification:</strong> Use the Arbiscan links to explore the transaction on-chain
-            </li>
-          </ol>
+        {/* Educational Scanner */}
+        <div className="mt-12 grid lg:grid-cols-2 gap-8">
+          <div>
+            <h2 className="text-2xl font-bold mb-6">Why Arbitrum?</h2>
+            <div className="space-y-4">
+              {[
+                {
+                  title: "L2 Scaling Solution",
+                  desc: "Arbitrum is a Layer 2 scaling solution for Ethereum, offering faster transactions and lower fees while maintaining Ethereum's security.",
+                },
+                {
+                  title: "Optimistic Rollups",
+                  desc: "It uses Optimistic Rollups to bundle multiple transactions into a single proof, significantly reducing gas costs.",
+                },
+                {
+                  title: "Arbiscan Explorer",
+                  desc: "Arbiscan is the block explorer for Arbitrum, allowing you to verify transactions, view contract code, and track token transfers transparently.",
+                },
+              ].map((item, index) => (
+                <div key={index} className="collapse collapse-arrow bg-base-200 hover:bg-base-300 transition-colors">
+                  <input type="radio" name="arbitrum-accordion" defaultChecked={index === 0} />
+                  <div className="collapse-title text-xl font-medium">{item.title}</div>
+                  <div className="collapse-content">
+                    <p>{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <BlockchainScanner101 />
+          </div>
         </div>
       </div>
     </div>

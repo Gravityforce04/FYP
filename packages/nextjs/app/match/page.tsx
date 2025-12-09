@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { useAccount, useBalance } from "wagmi";
 import { useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
@@ -274,59 +275,15 @@ export default function MatchPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="container mx-auto px-4 py-8"
+    >
       <h1 className="text-3xl font-bold mb-6">Create Mock Match</h1>
 
-      {/* Debug Info */}
-      <div className="card bg-warning text-warning-content shadow-xl mb-6">
-        <div className="card-body">
-          <h2 className="card-title text-lg">🐛 Debug Info</h2>
-          <div className="text-sm space-y-1">
-            <div>
-              <strong>Connected Address:</strong>{" "}
-              {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Not Connected"}
-            </div>
-            <div>
-              <strong>Balance:</strong>{" "}
-              {balance ? `${Number(balance.formatted).toFixed(4)} ${balance.symbol}` : "Loading..."}
-            </div>
-            <div>
-              <strong>Match ID:</strong> {mockMatchId || "Not Set"}
-            </div>
-            <div>
-              <strong>Winner:</strong> {winner || "Not Set"}
-            </div>
-            <div>
-              <strong>Participants:</strong> {participants || "Not Set"}
-            </div>
-            <div>
-              <strong>Events Loaded:</strong> {events ? events.length : "Loading..."}
-            </div>
-            <div>
-              <strong>Events Loading:</strong> {eventsLoading ? "Yes" : "No"}
-            </div>
-            <div>
-              <strong>Transaction History:</strong> {transactionHistory.length}
-            </div>
-            <div>
-              <strong>Contract Name:</strong> RoboticsCompetition
-            </div>
-            <div>
-              <strong>Event Name:</strong> MatchResultRecorded
-            </div>
-          </div>
-          {!address && (
-            <div className="mt-2 p-2 bg-error text-error-content rounded text-xs">
-              ⚠️ Please connect your wallet first
-            </div>
-          )}
-          {address && (!balance || Number(balance.value) < 0.001) && (
-            <div className="mt-2 p-2 bg-error text-error-content rounded text-xs">
-              ⚠️ Low balance. You need at least 0.001 ETH for transactions
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Debug Info Removed */}
 
       <div className="card bg-base-100 shadow-xl mb-6">
         <div className="card-body space-y-4">
@@ -491,6 +448,6 @@ export default function MatchPage() {
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

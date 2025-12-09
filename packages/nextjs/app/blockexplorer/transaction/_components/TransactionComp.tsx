@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Hash, Transaction, TransactionReceipt, formatEther, formatUnits } from "viem";
-import { hardhat } from "viem/chains";
 import { usePublicClient } from "wagmi";
 import { Address } from "~~/components/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
@@ -11,26 +10,33 @@ import { decodeTransactionData, getFunctionDetails } from "~~/utils/scaffold-eth
 import { replacer } from "~~/utils/scaffold-eth/common";
 
 const TransactionComp = ({ txHash }: { txHash: Hash }) => {
-  const client = usePublicClient({ chainId: hardhat.id });
+  const { targetNetwork } = useTargetNetwork();
+  const client = usePublicClient({ chainId: targetNetwork.id });
   const router = useRouter();
   const [transaction, setTransaction] = useState<Transaction>();
   const [receipt, setReceipt] = useState<TransactionReceipt>();
   const [functionCalled, setFunctionCalled] = useState<string>();
-
-  const { targetNetwork } = useTargetNetwork();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (txHash && client) {
       const fetchTransaction = async () => {
-        const tx = await client.getTransaction({ hash: txHash });
-        const receipt = await client.getTransactionReceipt({ hash: txHash });
+        try {
+          const tx = await client.getTransaction({ hash: txHash });
+          const receipt = await client.getTransactionReceipt({ hash: txHash });
 
-        const transactionWithDecodedData = decodeTransactionData(tx);
-        setTransaction(transactionWithDecodedData);
-        setReceipt(receipt);
+          const transactionWithDecodedData = decodeTransactionData(tx);
+          setTransaction(transactionWithDecodedData);
+          setReceipt(receipt);
 
-        const functionCalled = transactionWithDecodedData.input.substring(0, 10);
-        setFunctionCalled(functionCalled);
+          const functionCalled = transactionWithDecodedData.input.substring(0, 10);
+          setFunctionCalled(functionCalled);
+        } catch (e) {
+          console.error("Error fetching transaction:", e);
+          setError(
+            "Failed to fetch transaction details. Please check if the transaction hash is correct and the network is supported.",
+          );
+        }
       };
 
       fetchTransaction();
@@ -42,7 +48,26 @@ const TransactionComp = ({ txHash }: { txHash: Hash }) => {
       <button className="btn btn-sm btn-primary" onClick={() => router.back()}>
         Back
       </button>
-      {transaction ? (
+      {error ? (
+        <div className="alert alert-error shadow-lg">
+          <div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="stroke-current flex-shrink-0 h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>{error}</span>
+          </div>
+        </div>
+      ) : transaction ? (
         <div className="overflow-x-auto">
           <h2 className="text-3xl font-bold mb-4 text-center text-primary-content">Transaction Details</h2>{" "}
           <table className="table rounded-lg bg-base-100 w-full shadow-lg md:table-lg table-md">
