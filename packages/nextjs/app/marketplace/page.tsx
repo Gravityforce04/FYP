@@ -1001,7 +1001,6 @@ function OwnedNFTs() {
           });
 
           console.log(`Token ${tokenId}: Owner = ${owner}`);
-
           // Check for duplicates
           if (tokenOwners.has(owner)) {
             const existingTokenId = tokenOwners.get(owner);
@@ -1009,25 +1008,6 @@ function OwnedNFTs() {
             console.log(`⚠️  DUPLICATE OWNER: Token ${tokenId} and Token ${existingTokenId} both owned by ${owner}`);
           } else {
             tokenOwners.set(owner, tokenId);
-          }
-
-          // Get token URI to check metadata
-          try {
-            const tokenURI = await publicClient.readContract({
-              address: nftAddress as `0x${string}`,
-              abi: contracts.default[31337].NFT.abi,
-              functionName: "tokenURI",
-              args: [BigInt(tokenId)],
-            });
-
-            if (tokenURI.startsWith("data:application/json;base64,")) {
-              const base64Data = tokenURI.split(",")[1];
-              const jsonString = atob(base64Data);
-              const metadata = JSON.parse(jsonString);
-              console.log(`  Metadata: Name="${metadata.name}", MatchID="${metadata.attributes?.matchId}"`);
-            }
-          } catch (uriError) {
-            console.log(`  Error getting token URI:`, uriError);
           }
         } catch (error) {
           console.log(`❌ Error checking token ${tokenId}:`, error);

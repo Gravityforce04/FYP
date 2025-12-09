@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { parseEther } from "viem";
 import { useAccount } from "wagmi";
 import { Address } from "~~/components/scaffold-eth";
@@ -50,6 +50,7 @@ const Create = () => {
   const [mintedTokenId, setMintedTokenId] = useState<number | null>(null);
   const [createdNFTs, setCreatedNFTs] = useState<CreatedNFT[]>([]);
   const [lastTransactionHash, setLastTransactionHash] = useState<string>("");
+  const [chainResetDetected, setChainResetDetected] = useState(false);
 
   // Get connected wallet address
   const { address: connectedAddress } = useAccount();
@@ -125,16 +126,11 @@ const Create = () => {
     functionName: "tokenCount",
   });
 
-  // Test contract connection
-  const { data: contractName } = useScaffoldReadContract({
-    contractName: "NFT",
-    functionName: "name",
-  });
-
   // Get mint events for real transaction hashes
   const { data: mintEvents } = useScaffoldEventHistory({
     contractName: "NFT",
     eventName: "Transfer",
+    fromBlock: 0n,
     watch: true,
   });
 
@@ -214,81 +210,85 @@ const Create = () => {
   };
 
   // Function to get the actual token ID from the blockchain
-  const getActualTokenId = async (transactionHash: string): Promise<number> => {
-    try {
-      console.log("🔍 Getting actual token ID for transaction:", transactionHash);
-      console.log("Available mint events:", mintEvents?.length || 0);
-
-      // Try to get token ID from mint events first
-      if (mintEvents && mintEvents.length > 0) {
-        const mintEvent = mintEvents.find(
-          event =>
-            event.transactionHash === transactionHash &&
-            event.args.from === "0x0000000000000000000000000000000000000000",
-        );
-        if (mintEvent && mintEvent.args.tokenId) {
-          console.log("✅ Found token ID from mint event:", Number(mintEvent.args.tokenId));
-          return Number(mintEvent.args.tokenId);
-        }
-      }
-
-      // If mint events don't work, try to get token ID by querying the blockchain directly
+  const getActualTokenId = useCallback(
+    async (transactionHash: string): Promise<number> => {
       try {
-        const { createPublicClient, http, decodeEventLog } = await import("viem");
-        const { localhost } = await import("viem/chains");
+        console.log("🔍 Getting actual token ID for transaction:", transactionHash);
+        console.log("Available mint events:", mintEvents?.length || 0);
 
-        const publicClient = createPublicClient({
-          chain: localhost,
-          transport: http("http://127.0.0.1:8545"),
-        });
-
-        // Get the transaction receipt to find the Transfer event
-        const receipt = await publicClient.getTransactionReceipt({
-          hash: transactionHash as `0x${string}`,
-        });
-
-        if (receipt && receipt.logs) {
-          // Find the Transfer event in the logs
-          for (const log of receipt.logs) {
-            try {
-              // Decode the Transfer event
-              const decoded = decodeEventLog({
-                abi: nftContractInfo?.abi || [],
-                data: log.data,
-                topics: log.topics,
-              });
-
-              if (decoded.eventName === "Transfer" && decoded.args) {
-                const { from, to, tokenId } = decoded.args as any;
-                if (
-                  from === "0x0000000000000000000000000000000000000000" &&
-                  to !== "0x0000000000000000000000000000000000000000"
-                ) {
-                  console.log("✅ Found token ID from transaction receipt:", Number(tokenId));
-                  return Number(tokenId);
-                }
-              }
-            } catch {
-              // Skip logs that can't be decoded
-              continue;
-            }
+        // Try to get token ID from mint events first
+        if (mintEvents && mintEvents.length > 0) {
+          const mintEvent = mintEvents.find(
+            event =>
+              event.transactionHash === transactionHash &&
+              event.args.from === "0x0000000000000000000000000000000000000000",
+          );
+          if (mintEvent && mintEvent.args.tokenId) {
+            console.log("✅ Found token ID from mint event:", Number(mintEvent.args.tokenId));
+            return Number(mintEvent.args.tokenId);
           }
         }
-      } catch (blockchainError) {
-        console.log("❌ Error querying blockchain for token ID:", blockchainError);
-      }
 
-      // Final fallback: use current token count - 1 (since tokenCount is the next token to be minted)
-      const fallbackTokenId = tokenCount ? Number(tokenCount) - 1 : 1;
-      console.log("⚠️ Using fallback token ID:", fallbackTokenId);
-      return fallbackTokenId;
-    } catch (error) {
-      console.log("❌ Error getting actual token ID:", error);
-      const fallbackTokenId = tokenCount ? Number(tokenCount) - 1 : 1;
-      console.log("⚠️ Using fallback token ID after error:", fallbackTokenId);
-      return fallbackTokenId;
-    }
-  };
+        // If mint events don't work, try to get token ID by querying the blockchain directly
+        try {
+          const { createPublicClient, http, decodeEventLog } = await import("viem");
+          const { localhost } = await import("viem/chains");
+
+          const publicClient = createPublicClient({
+            chain: localhost,
+            transport: http("http://127.0.0.1:8545"),
+          });
+
+          // Get the transaction receipt to find the Transfer event
+          const receipt = await publicClient.getTransactionReceipt({
+            hash: transactionHash as `0x${string}`,
+          });
+
+          if (receipt && receipt.logs) {
+            // Find the Transfer event in the logs
+            for (const log of receipt.logs) {
+              try {
+                // Decode the Transfer event
+                const decoded = decodeEventLog({
+                  abi: nftContractInfo?.abi || [],
+                  data: log.data,
+                  topics: log.topics,
+                });
+
+                if (decoded.eventName === "Transfer" && decoded.args) {
+                  const { from, to, tokenId } = decoded.args as any;
+                  if (
+                    from === "0x0000000000000000000000000000000000000000" &&
+                    to !== "0x0000000000000000000000000000000000000000"
+                  ) {
+                    console.log("✅ Found token ID from transaction receipt:", Number(tokenId));
+                    return Number(tokenId);
+                  }
+                }
+              } catch {
+                // Skip logs that can't be decoded
+                continue;
+              }
+            }
+          }
+        } catch (blockchainError) {
+          console.log("❌ Error querying blockchain for token ID:", blockchainError);
+        }
+
+        // Final fallback: use current token count (if available) or default to 1
+        // If tokenCount is 0, it means we are minting the first token (ID 1)
+        const fallbackTokenId = tokenCount ? Number(tokenCount) : 1;
+        console.log("⚠️ Using fallback token ID:", fallbackTokenId);
+        return fallbackTokenId;
+      } catch (error) {
+        console.log("❌ Error getting actual token ID:", error);
+        const fallbackTokenId = tokenCount ? Number(tokenCount) : 1;
+        console.log("⚠️ Using fallback token ID after error:", fallbackTokenId);
+        return fallbackTokenId;
+      }
+    },
+    [mintEvents, tokenCount, nftContractInfo],
+  );
 
   const createNFT = async () => {
     if (!image || !price || !name || !description || !matchId) {
@@ -566,9 +566,24 @@ const Create = () => {
     }
   };
 
+  const clearHistory = () => {
+    const keys = Object.keys(localStorage);
+    const nftKeys = keys.filter(key => key.startsWith("nft-"));
+    nftKeys.forEach(key => localStorage.removeItem(key));
+    setCreatedNFTs([]);
+    setChainResetDetected(false);
+    notification.success("Local history cleared");
+  };
+
+  // Use a ref to access the latest mintEvents without triggering re-renders of loadExistingNFTs
+  const mintEventsRef = useRef(mintEvents);
+  useEffect(() => {
+    mintEventsRef.current = mintEvents;
+  }, [mintEvents]);
+
   const loadExistingNFTs = useCallback(async () => {
     if (!nftContractInfo?.address) {
-      notification.error("NFT contract address not found. Cannot load existing NFTs.");
+      // notification.error("NFT contract address not found. Cannot load existing NFTs.");
       return;
     }
 
@@ -578,9 +593,10 @@ const Create = () => {
       return;
     }
 
+    const currentMintEvents = mintEventsRef.current;
     console.log("Loading NFTs for connected wallet:", connectedAddress);
     console.log("Current token count:", tokenCount);
-    console.log("Available mint events:", mintEvents?.length || 0);
+    console.log("Available mint events:", currentMintEvents?.length || 0);
 
     try {
       // Load real NFT data from localStorage first (these are the actual created NFTs)
@@ -588,9 +604,7 @@ const Create = () => {
 
       // Get all stored NFT keys (using the new storage format)
       const keys = Object.keys(localStorage);
-      console.log("All localStorage keys:", keys);
       const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata")); // Exclude metadata keys
-      console.log("NFT keys found:", nftKeys);
 
       // Load real NFT data from localStorage and filter by connected wallet
       nftKeys.forEach(key => {
@@ -607,9 +621,9 @@ const Create = () => {
               }
 
               // Try to get the correct token ID from mint events
-              if (mintEvents && mintEvents.length > 0) {
+              if (currentMintEvents && currentMintEvents.length > 0) {
                 console.log(`🔍 Looking for mint event for transaction: ${nftData.transactionHash}`);
-                const mintEvent = mintEvents.find(
+                const mintEvent = currentMintEvents.find(
                   event =>
                     event.transactionHash === nftData.transactionHash &&
                     event.args.from === "0x0000000000000000000000000000000000000000",
@@ -658,13 +672,13 @@ const Create = () => {
         // Sort by timestamp (newest first)
         realNFTs.sort((a, b) => b.timestamp - a.timestamp);
         setCreatedNFTs(realNFTs);
-        notification.success(`Loaded ${realNFTs.length} NFTs from storage`);
+        // notification.success(`Loaded ${realNFTs.length} NFTs from storage`);
       } else {
         // Fallback: show basic info from blockchain events if no stored data
         const fallbackNFTs: CreatedNFT[] = [];
 
-        if (mintEvents && mintEvents.length > 0) {
-          const mintEventsOnly = mintEvents.filter(
+        if (currentMintEvents && currentMintEvents.length > 0) {
+          const mintEventsOnly = currentMintEvents.filter(
             event =>
               event.args.from === "0x0000000000000000000000000000000000000000" &&
               event.args.to !== "0x0000000000000000000000000000000000000000",
@@ -694,14 +708,14 @@ const Create = () => {
           notification.info(`Found ${fallbackNFTs.length} NFTs from blockchain (basic info only)`);
         } else {
           setCreatedNFTs([]);
-          notification.info("No NFTs found yet. Create your first NFT!");
+          // notification.info("No NFTs found yet. Create your first NFT!");
         }
       }
     } catch (error) {
       console.log("Error loading existing NFTs: ", error);
       notification.error("Failed to load existing NFTs. Check console for details.");
     }
-  }, [nftContractInfo?.address, connectedAddress]);
+  }, [nftContractInfo?.address, connectedAddress, tokenCount]);
 
   // Function to fix token IDs for existing NFTs
   const fixTokenIds = useCallback(async () => {
@@ -780,6 +794,25 @@ const Create = () => {
     }
   }, [nftContractInfo?.address, tokenCount, loadExistingNFTs]);
 
+  // Separate effect for chain reset detection to avoid infinite loops
+  useEffect(() => {
+    if (tokenCount === undefined) return;
+
+    const checkChainReset = () => {
+      const keys = Object.keys(localStorage);
+      const nftKeys = keys.filter(key => key.startsWith("nft-") && !key.includes("metadata"));
+
+      if (nftKeys.length > 0 && tokenCount === 0n) {
+        console.log("⚠️ Chain reset detected: Local items exist but tokenCount is 0");
+        setChainResetDetected(true);
+      } else {
+        setChainResetDetected(false);
+      }
+    };
+
+    checkChainReset();
+  }, [tokenCount]);
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
@@ -789,331 +822,343 @@ const Create = () => {
         <div className="card bg-warning text-warning-content shadow-xl mb-6">
           <div className="card-body">
             <h2 className="card-title text-lg">🐛 Debug Info</h2>
-            <div className="text-sm space-y-1">
-              <div>
-                <strong>Connected Wallet:</strong>{" "}
-                {connectedAddress ? `${connectedAddress.slice(0, 6)}...${connectedAddress.slice(-4)}` : "Not Connected"}
-              </div>
-              <div>
-                <strong>NFT Contract:</strong> {nftContractInfo?.address || "Not Found"}
-              </div>
-              <div>
-                <strong>Marketplace Contract:</strong> {marketplaceContractInfo?.address || "Not Found"}
-              </div>
-              <div>
-                <strong>Token Count:</strong> {tokenCount?.toString() || "0"}
-              </div>
-              <div>
-                <strong>Mint Events:</strong> {mintEvents?.length || 0}
-              </div>
-              <div>
-                <strong>Contract ABIs:</strong> NFT:{" "}
-                {nftContractInfo?.abi ? `${nftContractInfo.abi.length} functions` : "No ABI"}, Marketplace:{" "}
-                {marketplaceContractInfo?.abi ? `${marketplaceContractInfo.abi.length} functions` : "No ABI"}
-              </div>
-              <div>
-                <strong>NFT Contract Name:</strong> {contractName || "Loading..."}
-              </div>
+            <div>
+              <strong>Connected Wallet:</strong>{" "}
+              {connectedAddress ? `${connectedAddress.slice(0, 6)}...${connectedAddress.slice(-4)}` : "Not Connected"}
+            </div>
+            <div>
+              <strong>NFT Contract:</strong> {nftContractInfo?.address || "Not Found"}
+            </div>
+            <div>
+              <strong>Token Count:</strong> {tokenCount !== undefined ? tokenCount.toString() : "Loading..."}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Success Message */}
-        {lastTransactionHash && (
-          <div className="card bg-success text-success-content shadow-xl mb-6">
-            <div className="card-body">
-              <h2 className="card-title text-lg">✅ NFT Created Successfully!</h2>
-              <p>Your NFT has been minted successfully!</p>
+      {/* Chain Reset Warning */}
+      {chainResetDetected && (
+        <div className="alert alert-warning shadow-lg mb-6">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="stroke-current flex-shrink-0 h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <div>
+            <h3 className="font-bold">Chain Reset Detected!</h3>
+            <div className="text-xs">
+              We found local history of NFTs but the blockchain seems to be empty (Token Count: 0). This usually happens
+              when the local blockchain is restarted.
+            </div>
+          </div>
+          <button className="btn btn-sm btn-error" onClick={clearHistory}>
+            Clear Local History
+          </button>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {lastTransactionHash && (
+        <div className="card bg-success text-success-content shadow-xl mb-6">
+          <div className="card-body">
+            <h2 className="card-title text-lg">✅ NFT Created Successfully!</h2>
+            <p>Your NFT has been minted successfully!</p>
+            <div className="text-sm">
+              <strong>Transaction Hash:</strong>{" "}
+              <a
+                href={`/blockexplorer/transaction/${lastTransactionHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link link-primary"
+              >
+                {formatTransactionHash(lastTransactionHash)}
+              </a>
+            </div>
+            {mintedTokenId && (
               <div className="text-sm">
-                <strong>Transaction Hash:</strong>{" "}
-                <a
-                  href={`/blockexplorer/transaction/${lastTransactionHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="link link-primary"
-                >
-                  {formatTransactionHash(lastTransactionHash)}
-                </a>
-              </div>
-              {mintedTokenId && (
-                <div className="text-sm">
-                  <strong>Token ID:</strong> {mintedTokenId}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* NFT Creation Form */}
-        <div className="card bg-base-100 shadow-xl mb-6">
-          <div className="card-body">
-            <div className="space-y-6">
-              {/* Match ID Input */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Match ID *</span>
-                </label>
-                <input
-                  type="number"
-                  placeholder="Enter the Match ID you participated in"
-                  className="input input-bordered w-full"
-                  value={matchId}
-                  onChange={e => setMatchId(e.target.value)}
-                  required
-                />
-                {matchId && effectiveMatchResult && (
-                  <div className="mt-2 p-3 bg-base-200 rounded-lg">
-                    <div className="text-sm">
-                      <strong>Match #{matchId}</strong>
-                    </div>
-                    <div className="text-sm">
-                      Winner: <Address address={effectiveMatchResult.winner} />
-                    </div>
-                    <div className="text-sm">
-                      Status: {effectiveMatchResult.verified ? "✅ Verified" : "❌ Not Verified"}
-                    </div>
-                    <div className="text-sm">Participants: {effectiveMatchResult.participants.length}</div>
-                    {localMatchResult && !matchResult && (
-                      <div className="text-xs text-blue-600 mt-1">
-                        ℹ️ Using local transaction history (transaction may still be pending)
-                      </div>
-                    )}
-                  </div>
-                )}
-                {matchId && !effectiveMatchResult && (
-                  <div className="mt-2 p-3 bg-warning rounded-lg">
-                    <div className="text-sm text-warning-content">
-                      Match not found. Please check the Match ID or wait for the transaction to be mined.
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Image Upload */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Upload Image</span>
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="file-input file-input-bordered w-full"
-                  onChange={uploadToIPFS}
-                  disabled={isUploading}
-                />
-                {isUploading && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="loading loading-spinner loading-sm"></span>
-                    <span className="text-sm">Uploading to IPFS...</span>
-                  </div>
-                )}
-                {image && (
-                  <div className="mt-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={image}
-                      alt="Preview"
-                      className="w-32 h-32 object-cover rounded-lg"
-                      onLoad={() => console.log("Image preview loaded successfully")}
-                      onError={e => console.log("Image preview failed to load:", e)}
-                    />
-                    <div className="text-xs text-gray-500 mt-1">Preview: {image.substring(0, 30)}...</div>
-                  </div>
-                )}
-              </div>
-
-              {/* NFT Name */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">NFT Name</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter NFT name"
-                  className="input input-bordered w-full"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Description */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Description</span>
-                </label>
-                <textarea
-                  placeholder="Enter NFT description"
-                  className="textarea textarea-bordered w-full h-24"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Price */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Price (ETH)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.01"
-                  className="input input-bordered w-full"
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* Create Button */}
-              <div className="form-control mt-6">
-                <button
-                  className={`btn btn-primary btn-lg w-full ${isCreating ? "loading" : ""}`}
-                  onClick={createNFT}
-                  disabled={
-                    !image ||
-                    !price ||
-                    !name ||
-                    !description ||
-                    !matchId ||
-                    !effectiveMatchResult?.verified ||
-                    isCreating ||
-                    isProcessing
-                  }
-                >
-                  {isCreating ? "Creating NFT..." : isProcessing ? "Processing..." : "Create & Mint NFT!"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Created NFTs List */}
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="card-title text-lg">📋 Minting History</h2>
-              <div className="flex items-center gap-4">
-                <div className="text-sm">
-                  <strong>Total NFTs:</strong> {createdNFTs.length} | <strong>Token Count:</strong>{" "}
-                  {tokenCount?.toString() || "0"}
-                </div>
-                <div className="flex gap-2">
-                  <button className="btn btn-outline btn-sm" onClick={loadExistingNFTs}>
-                    🔄 Refresh
-                  </button>
-                  <button className="btn btn-outline btn-sm" onClick={fixTokenIds}>
-                    🔧 Fix Token IDs
-                  </button>
-                </div>
-              </div>
-            </div>
-            {createdNFTs.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <p>No NFTs created yet. Create your first NFT above!</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="table table-zebra w-full">
-                  <thead>
-                    <tr>
-                      <th>Token ID</th>
-                      <th>Name</th>
-                      <th>Price (ETH)</th>
-                      <th>Match ID</th>
-                      <th>Transaction Hash</th>
-                      <th>Created</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {createdNFTs.map((nft, index) => (
-                      <tr key={index}>
-                        <td className="font-mono">{nft.tokenId}</td>
-                        <td>{nft.name}</td>
-                        <td>{nft.price}</td>
-                        <td>{nft.matchId}</td>
-                        <td className="font-mono text-xs">
-                          <a
-                            href={`/blockexplorer/transaction/${nft.transactionHash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="link link-primary"
-                          >
-                            {formatTransactionHash(nft.transactionHash)}
-                          </a>
-                        </td>
-                        <td>{formatTimestamp(nft.timestamp)}</td>
-                        <td>
-                          <button
-                            className="btn btn-xs btn-outline btn-primary"
-                            onClick={() => listNFTOnMarketplace(nft.tokenId, nft.price)}
-                          >
-                            📋 List
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <strong>Token ID:</strong> {mintedTokenId}
               </div>
             )}
           </div>
         </div>
+      )}
 
-        {/* Information Cards */}
-        <div className="grid md:grid-cols-3 gap-6 mt-12">
-          <div className="card bg-base-100 shadow-lg">
-            <div className="card-body text-center">
-              <div className="text-4xl mb-2">🏆</div>
-              <h4 className="card-title justify-center">Verify Match</h4>
-              <p>Enter a valid Match ID to verify your participation and eligibility</p>
+      {/* NFT Creation Form */}
+      <div className="card bg-base-100 shadow-xl mb-6">
+        <div className="card-body">
+          <div className="space-y-6">
+            {/* Match ID Input */}
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Match ID *</span>
+              </label>
+              <input
+                type="number"
+                placeholder="Enter the Match ID you participated in"
+                className="input input-bordered w-full"
+                value={matchId}
+                onChange={e => setMatchId(e.target.value)}
+                required
+              />
+              {matchId && effectiveMatchResult && (
+                <div className="mt-2 p-3 bg-base-200 rounded-lg">
+                  <div className="text-sm">
+                    <strong>Match #{matchId}</strong>
+                  </div>
+                  <div className="text-sm">
+                    Winner: <Address address={effectiveMatchResult.winner} />
+                  </div>
+                  <div className="text-sm">
+                    Status: {effectiveMatchResult.verified ? "✅ Verified" : "❌ Not Verified"}
+                  </div>
+                  <div className="text-sm">Participants: {effectiveMatchResult.participants.length}</div>
+                  {localMatchResult && !matchResult && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      ℹ️ Using local transaction history (transaction may still be pending)
+                    </div>
+                  )}
+                </div>
+              )}
+              {matchId && !effectiveMatchResult && (
+                <div className="mt-2 p-3 bg-warning rounded-lg">
+                  <div className="text-sm text-warning-content">
+                    Match not found. Please check the Match ID or wait for the transaction to be mined.
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
 
-          <div className="card bg-base-100 shadow-lg">
-            <div className="card-body text-center">
-              <div className="text-4xl mb-2">🖼️</div>
-              <h4 className="card-title justify-center">Upload & Describe</h4>
-              <p>Upload your competition image and add name, description, and price</p>
+            {/* Image Upload */}
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Upload Image</span>
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                className="file-input file-input-bordered w-full"
+                onChange={uploadToIPFS}
+                disabled={isUploading}
+              />
+              {isUploading && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="loading loading-spinner loading-sm"></span>
+                  <span className="text-sm">Uploading to IPFS...</span>
+                </div>
+              )}
+              {image && (
+                <div className="mt-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={image}
+                    alt="Preview"
+                    className="w-32 h-32 object-cover rounded-lg"
+                    onLoad={() => console.log("Image preview loaded successfully")}
+                    onError={e => console.log("Image preview failed to load:", e)}
+                  />
+                  <div className="text-xs text-gray-500 mt-1">Preview: {image.substring(0, 30)}...</div>
+                </div>
+              )}
             </div>
-          </div>
 
-          <div className="card bg-base-100 shadow-lg">
-            <div className="card-body text-center">
-              <div className="text-4xl mb-2">⚡</div>
-              <h4 className="card-title justify-center">Mint NFT</h4>
-              <p>Mint your verified competition NFT on the blockchain</p>
+            {/* NFT Name */}
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">NFT Name</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Enter NFT name"
+                className="input input-bordered w-full"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Description */}
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Description</span>
+              </label>
+              <textarea
+                placeholder="Enter NFT description"
+                className="textarea textarea-bordered w-full h-24"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Price */}
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Price (ETH)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.01"
+                className="input input-bordered w-full"
+                value={price}
+                onChange={e => setPrice(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Create Button */}
+            <div className="form-control mt-6">
+              <button
+                className={`btn btn-primary btn-lg w-full ${isCreating ? "loading" : ""}`}
+                onClick={createNFT}
+                disabled={
+                  !image ||
+                  !price ||
+                  !name ||
+                  !description ||
+                  !matchId ||
+                  !effectiveMatchResult?.verified ||
+                  isCreating ||
+                  isProcessing
+                }
+              >
+                {isCreating ? "Creating NFT..." : isProcessing ? "Processing..." : "Create & Mint NFT!"}
+              </button>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Instructions */}
-        <div className="mt-8 p-6 bg-base-200 rounded-lg">
-          <h3 className="text-xl font-semibold mb-4">📖 How to Create Your NFT</h3>
-          <ol className="list-decimal list-inside space-y-2 text-sm">
-            <li>
-              <strong>Verify Match ID:</strong> Enter a Match ID you participated in. Only verified matches are
-              eligible.
-            </li>
-            <li>
-              <strong>Upload Image:</strong> Choose an image file (JPG, PNG, GIF) to represent your NFT.
-            </li>
-            <li>
-              <strong>Add Details:</strong> Provide a name, description, and price for your NFT.
-            </li>
-            <li>
-              <strong>Mint NFT:</strong> Click the button to mint your NFT on the blockchain.
-            </li>
-            <li>
-              <strong>List on Marketplace:</strong> After minting, use the &quot;List&quot; button to list your NFT for
-              sale.
-            </li>
-          </ol>
+      {/* Created NFTs List */}
+      <div className="card bg-base-200 shadow-xl">
+        <div className="card-body">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="card-title text-lg">📋 Minting History</h2>
+            <div className="flex items-center gap-4">
+              <div className="text-sm">
+                <strong>Total NFTs:</strong> {createdNFTs.length} | <strong>Token Count:</strong>{" "}
+                {tokenCount?.toString() || "0"}
+              </div>
+              <div className="flex gap-2">
+                <button className="btn btn-outline btn-sm" onClick={loadExistingNFTs}>
+                  🔄 Refresh
+                </button>
+                <button className="btn btn-outline btn-sm" onClick={fixTokenIds}>
+                  🔧 Fix Token IDs
+                </button>
+              </div>
+            </div>
+          </div>
+          {createdNFTs.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No NFTs created yet. Create your first NFT above!</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table table-zebra w-full">
+                <thead>
+                  <tr>
+                    <th>Token ID</th>
+                    <th>Name</th>
+                    <th>Price (ETH)</th>
+                    <th>Match ID</th>
+                    <th>Transaction Hash</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {createdNFTs.map((nft, index) => (
+                    <tr key={index}>
+                      <td className="font-mono">{nft.tokenId}</td>
+                      <td>{nft.name}</td>
+                      <td>{nft.price}</td>
+                      <td>{nft.matchId}</td>
+                      <td className="font-mono text-xs">
+                        <a
+                          href={`/blockexplorer/transaction/${nft.transactionHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="link link-primary"
+                        >
+                          {formatTransactionHash(nft.transactionHash)}
+                        </a>
+                      </td>
+                      <td>{formatTimestamp(nft.timestamp)}</td>
+                      <td>
+                        <button
+                          className="btn btn-xs btn-outline btn-primary"
+                          onClick={() => listNFTOnMarketplace(nft.tokenId, nft.price)}
+                        >
+                          📋 List
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Information Cards */}
+      <div className="grid md:grid-cols-3 gap-6 mt-12">
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body text-center">
+            <div className="text-4xl mb-2">🏆</div>
+            <h4 className="card-title justify-center">Verify Match</h4>
+            <p>Enter a valid Match ID to verify your participation and eligibility</p>
+          </div>
+        </div>
+
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body text-center">
+            <div className="text-4xl mb-2">🖼️</div>
+            <h4 className="card-title justify-center">Upload & Describe</h4>
+            <p>Upload your competition image and add name, description, and price</p>
+          </div>
+        </div>
+
+        <div className="card bg-base-100 shadow-lg">
+          <div className="card-body text-center">
+            <div className="text-4xl mb-2">⚡</div>
+            <h4 className="card-title justify-center">Mint NFT</h4>
+            <p>Mint your verified competition NFT on the blockchain</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Instructions */}
+      <div className="mt-8 p-6 bg-base-200 rounded-lg">
+        <h3 className="text-xl font-semibold mb-4">📖 How to Create Your NFT</h3>
+        <ol className="list-decimal list-inside space-y-2 text-sm">
+          <li>
+            <strong>Verify Match ID:</strong> Enter a Match ID you participated in. Only verified matches are eligible.
+          </li>
+          <li>
+            <strong>Upload Image:</strong> Choose an image file (JPG, PNG, GIF) to represent your NFT.
+          </li>
+          <li>
+            <strong>Add Details:</strong> Provide a name, description, and price for your NFT.
+          </li>
+          <li>
+            <strong>Mint NFT:</strong> Click the button to mint your NFT on the blockchain.
+          </li>
+          <li>
+            <strong>List on Marketplace:</strong> After minting, use the &quot;List&quot; button to list your NFT for
+            sale.
+          </li>
+        </ol>
       </div>
     </div>
   );
