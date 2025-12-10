@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useAccount, useBalance, usePublicClient } from "wagmi";
-import { useDeployedContractInfo, useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { createPublicClient, formatEther, http } from "viem";
+import { useAccount, useBalance } from "wagmi";
+import deployedContracts from "~~/contracts/deployedContracts";
+import { useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import scaffoldConfig from "~~/scaffold.config";
 import { notification } from "~~/utils/scaffold-eth";
 
 interface TransactionDetails {
@@ -31,8 +34,14 @@ export default function MatchPage() {
     contractName: "RoboticsCompetition",
   });
 
-  const { data: deployedContractData } = useDeployedContractInfo("RoboticsCompetition");
-  const publicClient = usePublicClient();
+  // const { data: deployedContractData } = useDeployedContractInfo("RoboticsCompetition");
+  // const publicClient = usePublicClient();
+
+  const targetNetwork = scaffoldConfig.targetNetworks[0];
+  const publicClient = createPublicClient({
+    chain: targetNetwork,
+    transport: http(targetNetwork.rpcUrls.default.http[0]),
+  });
 
   // Test contract connection
   const testContractConnection = async () => {
@@ -109,7 +118,7 @@ export default function MatchPage() {
     }
 
     // Check if user has enough ETH for transaction
-    if (balance && Number(balance.value) < 0.001) {
+    if (balance && Number(formatEther(balance.value)) < 0.001) {
       notification.error("Insufficient ETH balance. You need at least 0.001 ETH for transaction fees.");
       return;
     }
@@ -138,14 +147,20 @@ export default function MatchPage() {
       }
 
       // Check if match ID already exists
-      if (publicClient && deployedContractData) {
+      const targetNetworkId = scaffoldConfig.targetNetworks[0].id;
+      // @ts-ignore
+      const contractData = deployedContracts[targetNetworkId]?.RoboticsCompetition;
+
+      if (publicClient && contractData) {
         try {
           const matchResult = await publicClient.readContract({
-            address: deployedContractData.address,
-            abi: deployedContractData.abi,
+            address: contractData.address,
+            abi: contractData.abi,
             functionName: "getMatchResult",
             args: [BigInt(mockMatchId)],
           });
+
+          console.log("Pre-check match result:", matchResult);
 
           // @ts-ignore
           if (matchResult && matchResult.matchId !== 0n) {
@@ -169,6 +184,7 @@ export default function MatchPage() {
       const tx = await writeCompetition({
         functionName: "recordMatchResult",
         args: [BigInt(mockMatchId), winner as `0x${string}`, parts as `0x${string}`[], matchData],
+        gas: 500000n,
       });
 
       console.log("Mock match transaction response:", tx);

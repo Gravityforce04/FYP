@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * - No NFT minting logic (handled by separate NFT & Marketplace contracts)
  */
 contract RoboticsCompetition is Ownable {
-    
     struct MatchResult {
         uint256 matchId;
         address winner;
@@ -18,14 +17,14 @@ contract RoboticsCompetition is Ownable {
         string matchData;
         bool verified;
     }
-    
+
     // Incremental counter for convenience if you want to auto-assign ids off-chain
     mapping(uint256 => MatchResult) public matchResults;
-    
+
     event MatchResultRecorded(uint256 indexed matchId, address indexed winner);
-    
+
     constructor() Ownable(msg.sender) {}
-    
+
     function recordMatchResult(
         uint256 _matchId,
         address _winner,
@@ -42,10 +41,10 @@ contract RoboticsCompetition is Ownable {
             matchData: _matchData,
             verified: true
         });
-        
+
         emit MatchResultRecorded(_matchId, _winner);
     }
-    
+
     function isParticipant(address _user, uint256 _matchId) internal view returns (bool) {
         address[] memory participants = matchResults[_matchId].participants;
         for (uint i = 0; i < participants.length; i++) {
@@ -53,7 +52,7 @@ contract RoboticsCompetition is Ownable {
         }
         return false;
     }
-    
+
     function getMatchResult(uint256 _matchId) external view returns (MatchResult memory) {
         return matchResults[_matchId];
     }

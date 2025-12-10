@@ -19,6 +19,7 @@ const CreateMint = () => {
   const { address: connectedAddress } = useAccount();
   const [isUploading, setIsUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [ipfsHash, setIpfsHash] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -75,7 +76,7 @@ const CreateMint = () => {
     }
   }, []);
 
-  // Mock IPFS upload - in a real app this would upload to Pinata or similar
+  // Upload to Pinata IPFS via backend API
   const uploadToIPFS = async (event: React.ChangeEvent<HTMLInputElement>) => {
     event.preventDefault();
     const file = event.target.files?.[0];
@@ -84,47 +85,37 @@ const CreateMint = () => {
     try {
       setIsUploading(true);
 
-      // Resize image using Canvas
+      // 1. Show local preview immediately
       const reader = new FileReader();
       reader.onload = e => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 200;
-          const MAX_HEIGHT = 200;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, width, height);
-
-          // Get highly compressed base64 string
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
-          console.log("Resized image size:", dataUrl.length, "bytes");
-          setImagePreview(dataUrl);
-          setIsUploading(false);
-        };
-        img.src = e.target?.result as string;
+        setImagePreview(e.target?.result as string);
       };
       reader.readAsDataURL(file);
+
+      // 2. Upload to Pinata
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/ipfs/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setIpfsHash(data.ipfsHash);
+        console.log("Uploaded to IPFS:", data.ipfsHash);
+        notification.success("Image uploaded to IPFS!");
+      } else {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setIsUploading(false);
     } catch (error) {
       console.error("Error uploading file:", error);
       setIsUploading(false);
-      notification.error("Error uploading file");
+      notification.error("Error uploading file to IPFS");
     }
   };
 
@@ -134,34 +125,43 @@ const CreateMint = () => {
       return;
     }
 
+    if (!ipfsHash) {
+      notification.error("Please wait for the image to finish uploading to IPFS");
+      return;
+    }
+
     try {
-      // 1. Create metadata
-      const metadata = {
-        name: formData.name,
-        description: formData.description,
-        image: imagePreview, // In production, this would be an IPFS URL
-        attributes: [
-          { trait_type: "Match ID", value: formData.matchId },
-          { trait_type: "Creator", value: connectedAddress },
-        ],
-      };
+      // 1. Upload Metadata to Pinata
+      const metadataResponse = await fetch("/api/ipfs/upload-metadata", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          image: `ipfs://${ipfsHash}`,
+          attributes: [
+            { trait_type: "Match ID", value: formData.matchId },
+            { trait_type: "Creator", value: connectedAddress },
+          ],
+        }),
+      });
 
-      // Mock uploading metadata to IPFS
-      // In a real app, we would upload the JSON to IPFS and get the URI
-      // For this demo, we'll use a data URI or a placeholder
-      const tokenURI = `data:application/json;base64,${btoa(JSON.stringify(metadata))}`;
+      const metadataData = await metadataResponse.json();
 
-      console.log("TokenURI size:", tokenURI.length, "bytes");
-
-      if (tokenURI.length > 50000) {
-        notification.warning("Image is still too large for on-chain storage. Please try a simpler image.");
-        return;
+      if (!metadataResponse.ok) {
+        throw new Error(metadataData.error || "Metadata upload failed");
       }
+
+      const tokenURI = metadataData.tokenURI;
+      console.log("Metadata uploaded, Token URI:", tokenURI);
 
       // 2. Mint NFT
       const tx = await writeNFTAsync({
         functionName: "mint",
         args: [tokenURI],
+        gas: 500000n,
       });
 
       if (tx) {
@@ -171,7 +171,13 @@ const CreateMint = () => {
         const createdNFTs = JSON.parse(localStorage.getItem("created-nfts") || "[]");
         const newItem = {
           id: totalSupply ? Number(totalSupply) + 1 : Date.now(),
-          ...metadata,
+          name: formData.name,
+          description: formData.description,
+          image: imagePreview, // Keep local preview for history
+          attributes: [
+            { trait_type: "Match ID", value: formData.matchId },
+            { trait_type: "Creator", value: connectedAddress },
+          ],
           txHash: tx,
           createdAt: new Date().toISOString(),
         };
@@ -189,6 +195,7 @@ const CreateMint = () => {
           price: "",
         });
         setImagePreview(null);
+        setIpfsHash(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     } catch (error) {
