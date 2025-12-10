@@ -180,15 +180,15 @@ const CompetitionsPage = () => {
       </div>
 
       {/* Top Section: Verify Transaction (Full Width) */}
-      <div className="w-full mx-auto mb-16">
-        <div className="card bg-base-100 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title text-2xl mb-6">Verify Transaction</h2>
+      <div className="w-full mb-16">
+        <div className="card bg-transparent border border-base-content/10 shadow-xl">
+          <div className="card-body max-w-4xl mx-auto w-full text-center">
+            <h2 className="card-title text-2xl mb-6 justify-center">Verify Transaction</h2>
             <div className="form-control w-full">
               <label className="label">
                 <span className="label-text font-bold">Transaction Hash</span>
               </label>
-              <div className="join">
+              <div className="join max-w-lg mx-auto w-full">
                 <input
                   type="text"
                   placeholder="0x..."
@@ -204,11 +204,6 @@ const CompetitionsPage = () => {
                   {isVerifying ? "Verifying..." : "Verify"}
                 </button>
               </div>
-              <label className="label">
-                <span className="label-text-alt text-base-content/60">
-                  Paste the transaction hash from your wallet or block explorer.
-                </span>
-              </label>
             </div>
 
             {error && (
@@ -234,7 +229,7 @@ const CompetitionsPage = () => {
 
         {/* Verification Result Component (Appears below input) */}
         {verificationResult && (
-          <div className="card bg-base-100 shadow-xl border border-success/20 animate-fade-in-up mt-8">
+          <div className="card bg-transparent shadow-xl border border-success/20 animate-fade-in-up mt-8">
             <div className="card-body">
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center text-success">
@@ -260,11 +255,11 @@ const CompetitionsPage = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="p-4 bg-base-200 rounded-xl">
+                <div className="p-4 bg-transparent border border-base-content/10 rounded-xl">
                   <div className="text-sm opacity-60 mb-1">Match ID</div>
                   <div className="text-xl font-mono font-bold">{verificationResult.matchId}</div>
                 </div>
-                <div className="p-4 bg-base-200 rounded-xl">
+                <div className="p-4 bg-transparent border border-base-content/10 rounded-xl">
                   <div className="text-sm opacity-60 mb-1">Winner</div>
                   <div className="text-xl font-bold text-primary">{verificationResult.winner}</div>
                 </div>
@@ -272,7 +267,7 @@ const CompetitionsPage = () => {
 
               <div className="divider">Raw Data</div>
 
-              <div className="mockup-code bg-base-300 text-base-content text-xs">
+              <div className="mockup-code bg-transparent border border-base-content/10 text-base-content text-xs">
                 <pre data-prefix=">">
                   <code>Timestamp: {verificationResult.timestamp}</code>
                 </pre>
@@ -340,7 +335,7 @@ const CompetitionsPage = () => {
           </div>
 
           {/* External Links */}
-          <div className="card bg-base-200 border-base-300 border">
+          <div className="card bg-transparent border-base-300 border">
             <div className="card-body">
               <h3 className="card-title text-lg">External Verification</h3>
               <p className="text-sm opacity-70 mb-4">Cross-reference this transaction on official block explorers.</p>

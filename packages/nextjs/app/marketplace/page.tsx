@@ -106,16 +106,19 @@ function BrowseNFTs() {
 
       // Get contract addresses for verification
       const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
+      const scaffoldConfig = (await import("~~/scaffold.config")).default;
+      const targetNetwork = scaffoldConfig.targetNetworks[0];
 
       const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
+        chain: targetNetwork,
+        transport: http(targetNetwork.rpcUrls.default.http[0]),
       });
 
       const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
-      const marketplaceAddress = contracts.default[31337].Marketplace.address;
+      // @ts-ignore
+      const deployedContracts = contracts.default[targetNetwork.id];
+      const nftAddress = deployedContracts.NFT.address;
+      const marketplaceAddress = deployedContracts.Marketplace.address;
 
       for (const key of nftKeys) {
         try {
@@ -125,7 +128,7 @@ function BrowseNFTs() {
             try {
               const actualOwner = await publicClient.readContract({
                 address: nftAddress as `0x${string}`,
-                abi: contracts.default[31337].NFT.abi,
+                abi: deployedContracts.NFT.abi,
                 functionName: "ownerOf",
                 args: [BigInt(nftData.tokenId || 1)],
               });
@@ -196,20 +199,23 @@ function BrowseNFTs() {
 
           // Verify ownership and get metadata
           const { createPublicClient, http } = await import("viem");
-          const { localhost } = await import("viem/chains");
+          const scaffoldConfig = (await import("~~/scaffold.config")).default;
+          const targetNetwork = scaffoldConfig.targetNetworks[0];
           const contracts = await import("~~/contracts/deployedContracts");
 
           const publicClient = createPublicClient({
-            chain: localhost,
-            transport: http("http://127.0.0.1:8545"),
+            chain: targetNetwork,
+            transport: http(targetNetwork.rpcUrls.default.http[0]),
           });
 
-          const nftAddress = contracts.default[31337].NFT.address;
-          const marketplaceAddress = contracts.default[31337].Marketplace.address;
+          // @ts-ignore
+          const deployedContracts = contracts.default[targetNetwork.id];
+          const nftAddress = deployedContracts.NFT.address;
+          const marketplaceAddress = deployedContracts.Marketplace.address;
 
           const actualOwner = await publicClient.readContract({
             address: nftAddress as `0x${string}`,
-            abi: contracts.default[31337].NFT.abi,
+            abi: deployedContracts.NFT.abi,
             functionName: "ownerOf",
             args: [BigInt(item.tokenId)],
           });
@@ -434,20 +440,23 @@ function OwnedNFTs() {
 
       // Get contract addresses
       const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
+      const scaffoldConfig = (await import("~~/scaffold.config")).default;
+      const targetNetwork = scaffoldConfig.targetNetworks[0];
 
       const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
+        chain: targetNetwork,
+        transport: http(targetNetwork.rpcUrls.default.http[0]),
       });
 
       const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
+      // @ts-ignore
+      const deployedContracts = contracts.default[targetNetwork.id];
+      const nftAddress = deployedContracts.NFT.address;
 
       // Get total supply to know how many NFTs exist
       const totalSupply = await publicClient.readContract({
         address: nftAddress as `0x${string}`,
-        abi: contracts.default[31337].NFT.abi,
+        abi: deployedContracts.NFT.abi,
         functionName: "tokenCount",
       });
 
@@ -459,7 +468,7 @@ function OwnedNFTs() {
         try {
           const owner = await publicClient.readContract({
             address: nftAddress as `0x${string}`,
-            abi: contracts.default[31337].NFT.abi,
+            abi: deployedContracts.NFT.abi,
             functionName: "ownerOf",
             args: [BigInt(tokenId)],
           });
@@ -524,7 +533,7 @@ function OwnedNFTs() {
               try {
                 const tokenURI = await publicClient.readContract({
                   address: nftAddress as `0x${string}`,
-                  abi: contracts.default[31337].NFT.abi,
+                  abi: deployedContracts.NFT.abi,
                   functionName: "tokenURI",
                   args: [BigInt(tokenId)],
                 });
@@ -555,7 +564,9 @@ function OwnedNFTs() {
                   try {
                     // Get contract addresses
                     const contracts = await import("~~/contracts/deployedContracts");
-                    const marketplaceAddress = contracts.default[31337].Marketplace.address;
+                    // @ts-ignore
+                    const deployedContracts = contracts.default[targetNetwork.id];
+                    const marketplaceAddress = deployedContracts.Marketplace.address;
 
                     // Get Transfer events for this token
                     const transferEvents = await publicClient.getLogs({
@@ -650,7 +661,9 @@ function OwnedNFTs() {
 
                       // Get marketplace address
                       const contracts = await import("~~/contracts/deployedContracts");
-                      const marketplaceAddress = contracts.default[31337].Marketplace.address;
+                      // @ts-ignore
+                      const deployedContracts = contracts.default[targetNetwork.id];
+                      const marketplaceAddress = deployedContracts.Marketplace.address;
 
                       const listedEvents = await publicClient.getLogs({
                         address: marketplaceAddress as `0x${string}`,
@@ -735,7 +748,7 @@ function OwnedNFTs() {
                     creator: owner, // Current owner
                     timestamp: Date.now(),
                     transactionHash: actualTransactionHash,
-                    matchId: metadata.attributes?.matchId || "unknown",
+                    matchId: metadata.attributes?.find((a: any) => a.trait_type === "Match ID")?.value || "unknown",
                     price: "0.01",
                   };
                   console.log(`Created nftData from blockchain for token ${tokenId}:`, nftData);
@@ -812,20 +825,23 @@ function OwnedNFTs() {
 
     try {
       const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
+      const scaffoldConfig = (await import("~~/scaffold.config")).default;
+      const targetNetwork = scaffoldConfig.targetNetworks[0];
 
       const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
+        chain: targetNetwork,
+        transport: http(targetNetwork.rpcUrls.default.http[0]),
       });
 
       const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
+      // @ts-ignore
+      const deployedContracts = contracts.default[targetNetwork.id];
+      const nftAddress = deployedContracts.NFT.address;
 
       // Get total supply
       const totalSupply = await publicClient.readContract({
         address: nftAddress as `0x${string}`,
-        abi: contracts.default[31337].NFT.abi,
+        abi: deployedContracts.NFT.abi,
         functionName: "tokenCount",
       });
 
@@ -837,7 +853,7 @@ function OwnedNFTs() {
         try {
           const owner = await publicClient.readContract({
             address: nftAddress as `0x${string}`,
-            abi: contracts.default[31337].NFT.abi,
+            abi: deployedContracts.NFT.abi,
             functionName: "ownerOf",
             args: [BigInt(tokenId)],
           });
@@ -887,20 +903,23 @@ function OwnedNFTs() {
 
     try {
       const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
+      const scaffoldConfig = (await import("~~/scaffold.config")).default;
+      const targetNetwork = scaffoldConfig.targetNetworks[0];
 
       const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
+        chain: targetNetwork,
+        transport: http(targetNetwork.rpcUrls.default.http[0]),
       });
 
       const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
+      // @ts-ignore
+      const deployedContracts = contracts.default[targetNetwork.id];
+      const nftAddress = deployedContracts.NFT.address;
 
       // Get total supply
       const totalSupply = await publicClient.readContract({
         address: nftAddress as `0x${string}`,
-        abi: contracts.default[31337].NFT.abi,
+        abi: deployedContracts.NFT.abi,
         functionName: "tokenCount",
       });
 
@@ -915,7 +934,7 @@ function OwnedNFTs() {
             // Check actual ownership
             const owner = await publicClient.readContract({
               address: nftAddress as `0x${string}`,
-              abi: contracts.default[31337].NFT.abi,
+              abi: deployedContracts.NFT.abi,
               functionName: "ownerOf",
               args: [BigInt(storedData.tokenId)],
             });
@@ -952,20 +971,23 @@ function OwnedNFTs() {
 
     try {
       const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
+      const scaffoldConfig = (await import("~~/scaffold.config")).default;
+      const targetNetwork = scaffoldConfig.targetNetworks[0];
 
       const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
+        chain: targetNetwork,
+        transport: http(targetNetwork.rpcUrls.default.http[0]),
       });
 
       const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
+      // @ts-ignore
+      const deployedContracts = contracts.default[targetNetwork.id];
+      const nftAddress = deployedContracts.NFT.address;
 
       // Get total supply
       const totalSupply = await publicClient.readContract({
         address: nftAddress as `0x${string}`,
-        abi: contracts.default[31337].NFT.abi,
+        abi: deployedContracts.NFT.abi,
         functionName: "tokenCount",
       });
 
@@ -980,7 +1002,7 @@ function OwnedNFTs() {
         try {
           const owner = await publicClient.readContract({
             address: nftAddress as `0x${string}`,
-            abi: contracts.default[31337].NFT.abi,
+            abi: deployedContracts.NFT.abi,
             functionName: "ownerOf",
             args: [BigInt(tokenId)],
           });
@@ -1028,16 +1050,19 @@ function OwnedNFTs() {
 
     try {
       const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
+      const scaffoldConfig = (await import("~~/scaffold.config")).default;
+      const targetNetwork = scaffoldConfig.targetNetworks[0];
 
       const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
+        chain: targetNetwork,
+        transport: http(targetNetwork.rpcUrls.default.http[0]),
       });
 
       const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
-      const marketplaceAddress = contracts.default[31337].Marketplace.address;
+      // @ts-ignore
+      const deployedContracts = contracts.default[targetNetwork.id];
+      const nftAddress = deployedContracts.NFT.address;
+      const marketplaceAddress = deployedContracts.Marketplace.address;
 
       console.log(`📊 Contract Addresses:`);
       console.log(`  NFT: ${nftAddress}`);
@@ -1047,7 +1072,7 @@ function OwnedNFTs() {
       // Check total NFT supply
       const totalSupply = await publicClient.readContract({
         address: nftAddress as `0x${string}`,
-        abi: contracts.default[31337].NFT.abi,
+        abi: deployedContracts.NFT.abi,
         functionName: "tokenCount",
       });
 
@@ -1059,7 +1084,7 @@ function OwnedNFTs() {
         try {
           const owner = await publicClient.readContract({
             address: nftAddress as `0x${string}`,
-            abi: contracts.default[31337].NFT.abi,
+            abi: deployedContracts.NFT.abi,
             functionName: "ownerOf",
             args: [BigInt(tokenId)],
           });
@@ -1082,7 +1107,7 @@ function OwnedNFTs() {
       // Check marketplace item count
       const itemCount = await publicClient.readContract({
         address: marketplaceAddress as `0x${string}`,
-        abi: contracts.default[31337].Marketplace.abi,
+        abi: deployedContracts.Marketplace.abi,
         functionName: "itemCount",
       });
 
@@ -1093,7 +1118,7 @@ function OwnedNFTs() {
         try {
           const item = await publicClient.readContract({
             address: marketplaceAddress as `0x${string}`,
-            abi: contracts.default[31337].Marketplace.abi,
+            abi: deployedContracts.Marketplace.abi,
             functionName: "items",
             args: [BigInt(i)],
           });
@@ -1109,7 +1134,7 @@ function OwnedNFTs() {
           // Check if NFT is actually in marketplace
           const owner = await publicClient.readContract({
             address: nftAddress as `0x${string}`,
-            abi: contracts.default[31337].NFT.abi,
+            abi: deployedContracts.NFT.abi,
             functionName: "ownerOf",
             args: [BigInt(item[2])],
           });

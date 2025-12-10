@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { parseEther } from "viem";
+// import { parseEther } from "viem";
 import { useAccount } from "wagmi";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import {
-  useDeployedContractInfo,
-  useScaffoldEventHistory,
+  // useDeployedContractInfo,
+  // useScaffoldEventHistory,
   useScaffoldReadContract,
   useScaffoldWriteContract,
 } from "~~/hooks/scaffold-eth";
@@ -25,15 +25,16 @@ const CreateMint = () => {
     matchId: "",
     price: "",
   });
+  const [localHistory, setLocalHistory] = useState<any[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Contract hooks
-  const { data: nftContractData } = useDeployedContractInfo("NFT");
-  const { data: marketplaceContractData } = useDeployedContractInfo("Marketplace");
+  // const { data: nftContractData } = useDeployedContractInfo("NFT");
+  // const { data: marketplaceContractData } = useDeployedContractInfo("Marketplace");
 
   const { writeContractAsync: writeNFTAsync } = useScaffoldWriteContract("NFT");
-  const { writeContractAsync: writeMarketplaceAsync } = useScaffoldWriteContract("Marketplace");
+  // const { writeContractAsync: writeMarketplaceAsync } = useScaffoldWriteContract("Marketplace");
 
   // Read total supply to get next token ID (approximation)
   const { data: totalSupply } = useScaffoldReadContract({
@@ -42,21 +43,37 @@ const CreateMint = () => {
   });
 
   // Get created NFTs history
-  const { data: transferEvents } = useScaffoldEventHistory({
-    contractName: "NFT",
-    eventName: "Transfer",
-    fromBlock: 0n,
-    filters: { to: connectedAddress as string | undefined },
-    blockData: true,
-    transactionData: true,
-    receiptData: true,
-    enabled: !!connectedAddress,
-  });
+  // Get created NFTs history
+  // const { data: transferEvents } = useScaffoldEventHistory({
+  //   contractName: "NFT",
+  //   eventName: "Transfer",
+  //   fromBlock: 0n,
+  //   filters: { to: connectedAddress as string | undefined },
+  //   blockData: true,
+  //   transactionData: true,
+  //   receiptData: true,
+  //   enabled: !!connectedAddress,
+  // });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
+
+  // Load local history on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("created-nfts");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Sort by newest first
+        parsed.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setLocalHistory(parsed);
+      } catch (e) {
+        console.error("Error parsing local history", e);
+      }
+    }
+  }, []);
 
   // Mock IPFS upload - in a real app this would upload to Pinata or similar
   const uploadToIPFS = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,11 +84,41 @@ const CreateMint = () => {
     try {
       setIsUploading(true);
 
-      // Create a local preview
+      // Resize image using Canvas
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-        setIsUploading(false);
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 200;
+          const MAX_HEIGHT = 200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // Get highly compressed base64 string
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+          console.log("Resized image size:", dataUrl.length, "bytes");
+          setImagePreview(dataUrl);
+          setIsUploading(false);
+        };
+        img.src = e.target?.result as string;
       };
       reader.readAsDataURL(file);
     } catch (error) {
@@ -104,6 +151,13 @@ const CreateMint = () => {
       // For this demo, we'll use a data URI or a placeholder
       const tokenURI = `data:application/json;base64,${btoa(JSON.stringify(metadata))}`;
 
+      console.log("TokenURI size:", tokenURI.length, "bytes");
+
+      if (tokenURI.length > 50000) {
+        notification.warning("Image is still too large for on-chain storage. Please try a simpler image.");
+        return;
+      }
+
       // 2. Mint NFT
       const tx = await writeNFTAsync({
         functionName: "mint",
@@ -115,13 +169,17 @@ const CreateMint = () => {
 
         // Save to local storage for demo purposes (since we can't easily index the graph here)
         const createdNFTs = JSON.parse(localStorage.getItem("created-nfts") || "[]");
-        createdNFTs.push({
+        const newItem = {
           id: totalSupply ? Number(totalSupply) + 1 : Date.now(),
           ...metadata,
           txHash: tx,
           createdAt: new Date().toISOString(),
-        });
+        };
+        createdNFTs.push(newItem);
         localStorage.setItem("created-nfts", JSON.stringify(createdNFTs));
+
+        // Update local state
+        setLocalHistory(prev => [newItem, ...prev]);
 
         // Reset form
         setFormData({
@@ -139,35 +197,35 @@ const CreateMint = () => {
     }
   };
 
-  const handleList = async (tokenId: bigint) => {
-    if (!formData.price) {
-      notification.error("Please enter a price to list");
-      return;
-    }
+  // const handleList = async (tokenId: bigint) => {
+  //   if (!formData.price) {
+  //     notification.error("Please enter a price to list");
+  //     return;
+  //   }
 
-    try {
-      const priceInWei = parseEther(formData.price);
+  //   try {
+  //     const priceInWei = parseEther(formData.price);
 
-      // 1. Approve Marketplace to spend NFT
-      await writeNFTAsync({
-        functionName: "approve",
-        args: [marketplaceContractData?.address, tokenId],
-      });
+  //     // 1. Approve Marketplace to spend NFT
+  //     await writeNFTAsync({
+  //       functionName: "approve",
+  //       args: [marketplaceContractData?.address, tokenId],
+  //     });
 
-      notification.info("Approval successful, listing item...");
+  //     notification.info("Approval successful, listing item...");
 
-      // 2. List item on Marketplace
-      await writeMarketplaceAsync({
-        functionName: "listNFT",
-        args: [nftContractData?.address, tokenId, priceInWei],
-      });
+  //     // 2. List item on Marketplace
+  //     await writeMarketplaceAsync({
+  //       functionName: "listNFT",
+  //       args: [nftContractData?.address, tokenId, priceInWei],
+  //     });
 
-      notification.success("NFT Listed Successfully!");
-    } catch (error) {
-      console.error("Error listing NFT:", error);
-      notification.error("Error listing NFT");
-    }
-  };
+  //     notification.success("NFT Listed Successfully!");
+  //   } catch (error) {
+  //     console.error("Error listing NFT:", error);
+  //     notification.error("Error listing NFT");
+  //   }
+  // };
 
   return (
     <div className="flex items-center flex-col flex-grow pt-10">
@@ -265,31 +323,33 @@ const CreateMint = () => {
             <div className="card bg-base-100 shadow-xl border border-base-200">
               <div className="card-body">
                 <h2 className="card-title mb-4">Your Recent Mints</h2>
-                {transferEvents && transferEvents.length > 0 ? (
+                {localHistory.length > 0 ? (
                   <div className="space-y-4">
-                    {transferEvents.slice(0, 3).map((event, index) => (
+                    {localHistory.map((item, index) => (
                       <div key={index} className="flex items-center gap-4 p-3 bg-base-200 rounded-lg">
-                        <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center">
-                          <span className="text-xl">🤖</span>
+                        <div className="w-12 h-12 bg-base-300 rounded-lg overflow-hidden flex-shrink-0">
+                          {item.image ? (
+                            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xl">🤖</div>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-bold truncate">Token ID: {event.args.tokenId?.toString()}</p>
-                          <p className="text-xs text-base-content/60 truncate">{event.transactionHash}</p>
+                          <p className="font-bold truncate">{item.name}</p>
+                          <p className="text-xs text-base-content/60 truncate">
+                            Match ID: {item.attributes?.find((a: any) => a.trait_type === "Match ID")?.value}
+                          </p>
+                          <a
+                            href={`https://sepolia.arbiscan.io/tx/${item.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs link link-primary truncate block"
+                          >
+                            View on Arbiscan
+                          </a>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <input
-                            type="text"
-                            placeholder="Price (ETH)"
-                            className="input input-xs input-bordered w-20"
-                            value={formData.price}
-                            onChange={e => setFormData({ ...formData, price: e.target.value })}
-                          />
-                          <button
-                            className="btn btn-xs btn-secondary"
-                            onClick={() => event.args.tokenId && handleList(event.args.tokenId)}
-                          >
-                            List
-                          </button>
+                          <span className="badge badge-sm badge-success">Minted</span>
                         </div>
                       </div>
                     ))}

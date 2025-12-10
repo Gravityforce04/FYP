@@ -8,8 +8,9 @@ import { HeroSlideshow } from "~~/components/HeroSlideshow";
 
 const LandingPage = () => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const spacerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({
-    target: containerRef,
+    target: spacerRef,
     offset: ["start start", "end end"],
   });
 
@@ -26,30 +27,30 @@ const LandingPage = () => {
   // 0.9 - 1.0: Main Content Reveal
 
   // 1. Fighting Robot
-  const robotScale = useTransform(smoothProgress, [0, 0.15, 0.35], [1.2, 0.8, 0.8]);
-  const robotX = useTransform(smoothProgress, [0, 0.15, 0.35], ["0%", "-25%", "-25%"]);
-  const robotOpacity = useTransform(smoothProgress, [0.35, 0.45], [1, 0]);
+  const robotScale = useTransform(smoothProgress, [0, 0.25, 0.5], [1.2, 0.8, 0.8]);
+  const robotX = useTransform(smoothProgress, [0, 0.25, 0.5], ["0%", "-25%", "-25%"]);
+  const robotOpacity = useTransform(smoothProgress, [0.5, 0.6], [1, 0]);
 
   // 2. NFT (Right)
-  const nftOpacity = useTransform(smoothProgress, [0.15, 0.25, 0.35, 0.45], [0, 1, 1, 0]);
-  const nftX = useTransform(smoothProgress, [0.15, 0.25, 0.35], ["25%", "25%", "25%"]);
-  const plusOpacity = useTransform(smoothProgress, [0.2, 0.3, 0.4], [0, 1, 0]);
+  const nftOpacity = useTransform(smoothProgress, [0.2, 0.3, 0.5, 0.6], [0, 1, 1, 0]);
+  const nftX = useTransform(smoothProgress, [0.2, 0.3, 0.5], ["25%", "25%", "25%"]);
+  const plusOpacity = useTransform(smoothProgress, [0.25, 0.35, 0.45], [0, 1, 0]);
 
   // 3. Problem
-  const problemY = useTransform(smoothProgress, [0.45, 0.52, 0.6], [100, 0, -100]);
-  const problemOpacity = useTransform(smoothProgress, [0.45, 0.52, 0.6], [0, 1, 0]);
+  const problemY = useTransform(smoothProgress, [0.5, 0.57, 0.7], [100, 0, -100]);
+  const problemOpacity = useTransform(smoothProgress, [0.5, 0.57, 0.7], [0, 1, 0]);
 
   // 4. Solution
-  const solutionY = useTransform(smoothProgress, [0.55, 0.6, 0.62], [100, 0, -100]);
-  const solutionOpacity = useTransform(smoothProgress, [0.55, 0.6, 0.62], [0, 1, 0]);
+  const solutionY = useTransform(smoothProgress, [0.7, 0.75, 0.85], [100, 0, -100]);
+  const solutionOpacity = useTransform(smoothProgress, [0.7, 0.75, 0.85], [0, 1, 0]);
 
   // 5. Quote
-  const quoteScale = useTransform(smoothProgress, [0.65, 0.7, 0.75], [0.8, 1, 1.2]);
-  const quoteOpacity = useTransform(smoothProgress, [0.65, 0.7, 0.75], [0, 1, 0]);
+  const quoteScale = useTransform(smoothProgress, [0.85, 0.9, 0.95], [0.8, 1, 1.2]);
+  const quoteOpacity = useTransform(smoothProgress, [0.85, 0.9, 0.95], [0, 1, 0]);
 
   // 6. Main Content
-  const mainContentY = useTransform(smoothProgress, [0.75, 0.85], [100, 0]);
-  const mainContentOpacity = useTransform(smoothProgress, [0.75, 0.85], [0, 1]);
+  const mainContentY = useTransform(smoothProgress, [0.9, 1.0], [100, 0]);
+  const mainContentOpacity = useTransform(smoothProgress, [0.9, 1.0], [0, 1]);
 
   // Mock news data
   const newsItems = [
@@ -80,7 +81,7 @@ const LandingPage = () => {
     <div ref={containerRef} className="relative">
       {/* Scrollytelling Container - Sticky */}
       {/* Increased height to 800vh */}
-      <div className="h-[800vh] relative">
+      <div ref={spacerRef} className="h-[800vh] relative">
         <div className="sticky top-0 h-screen flex items-center justify-center overflow-hidden">
           {/* 1. Fighting Robot */}
           <motion.div
@@ -90,7 +91,14 @@ const LandingPage = () => {
             <div className="relative w-[800px] h-[600px]">
               {/* Faded Border Effect using mask-image */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/robot_hero.png" alt="Fighting Robot" className="w-full h-full object-contain" />
+              <img
+                src="https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=1000"
+                alt="Fighting Robot"
+                className="w-full h-full object-contain"
+              />
+              <div className="absolute bottom-0 left-0 right-0 text-center">
+                <p className="text-xl font-bold text-white bg-black/50 px-4 py-2 rounded-full inline-block">Robotics</p>
+              </div>
             </div>
           </motion.div>
 
@@ -109,7 +117,14 @@ const LandingPage = () => {
             <div className="relative w-[600px] h-[600px] flex items-center justify-center">
               {/* Faded Border Effect */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/nft_grid.png" alt="NFT Collection" className="w-full h-full object-contain" />
+              <img
+                src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&q=80&w=1000"
+                alt="NFT Collection"
+                className="w-full h-full object-contain"
+              />
+              <div className="absolute bottom-0 left-0 right-0 text-center">
+                <p className="text-xl font-bold text-white bg-black/50 px-4 py-2 rounded-full inline-block">NFT</p>
+              </div>
             </div>
           </motion.div>
 

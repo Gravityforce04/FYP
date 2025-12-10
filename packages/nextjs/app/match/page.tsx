@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useAccount, useBalance } from "wagmi";
-import { useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useAccount, useBalance, usePublicClient } from "wagmi";
+import { useDeployedContractInfo, useScaffoldEventHistory, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
 
 interface TransactionDetails {
@@ -30,6 +30,9 @@ export default function MatchPage() {
   const { writeContractAsync: writeCompetition } = useScaffoldWriteContract({
     contractName: "RoboticsCompetition",
   });
+
+  const { data: deployedContractData } = useDeployedContractInfo("RoboticsCompetition");
+  const publicClient = usePublicClient();
 
   // Test contract connection
   const testContractConnection = async () => {
@@ -131,6 +134,28 @@ export default function MatchPage() {
           notification.error(`Invalid participant address: ${part}`);
           setIsRecording(false);
           return;
+        }
+      }
+
+      // Check if match ID already exists
+      if (publicClient && deployedContractData) {
+        try {
+          const matchResult = await publicClient.readContract({
+            address: deployedContractData.address,
+            abi: deployedContractData.abi,
+            functionName: "getMatchResult",
+            args: [BigInt(mockMatchId)],
+          });
+
+          // @ts-ignore
+          if (matchResult && matchResult.matchId !== 0n) {
+            notification.error("Match ID already exists. Please generate a new one.");
+            setIsRecording(false);
+            return;
+          }
+        } catch (err) {
+          console.error("Error checking match ID:", err);
+          // Continue if check fails, let the contract handle it
         }
       }
 
