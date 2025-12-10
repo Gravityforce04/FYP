@@ -8,7 +8,7 @@ import { ProcessSlideshow } from "~~/components/ProcessSlideshow";
 
 const CreateLanding = () => {
   return (
-    <div className="flex items-center flex-col flex-grow pt-10">
+    <div className="flex items-center flex-col flex-grow pt-24">
       <div className="px-5 w-full max-w-[85%]">
         {/* Hero Section */}
         <div className="text-center mb-16">

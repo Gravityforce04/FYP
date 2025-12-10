@@ -40,16 +40,16 @@ const LandingPage = () => {
   const problemOpacity = useTransform(smoothProgress, [0.45, 0.52, 0.6], [0, 1, 0]);
 
   // 4. Solution
-  const solutionY = useTransform(smoothProgress, [0.6, 0.67, 0.75], [100, 0, -100]);
-  const solutionOpacity = useTransform(smoothProgress, [0.6, 0.67, 0.75], [0, 1, 0]);
+  const solutionY = useTransform(smoothProgress, [0.55, 0.6, 0.62], [100, 0, -100]);
+  const solutionOpacity = useTransform(smoothProgress, [0.55, 0.6, 0.62], [0, 1, 0]);
 
   // 5. Quote
-  const quoteScale = useTransform(smoothProgress, [0.75, 0.82, 0.9], [0.8, 1, 1.2]);
-  const quoteOpacity = useTransform(smoothProgress, [0.75, 0.82, 0.9], [0, 1, 0]);
+  const quoteScale = useTransform(smoothProgress, [0.65, 0.7, 0.75], [0.8, 1, 1.2]);
+  const quoteOpacity = useTransform(smoothProgress, [0.65, 0.7, 0.75], [0, 1, 0]);
 
   // 6. Main Content
-  const mainContentY = useTransform(smoothProgress, [0.9, 1], [100, 0]);
-  const mainContentOpacity = useTransform(smoothProgress, [0.9, 1], [0, 1]);
+  const mainContentY = useTransform(smoothProgress, [0.75, 0.85], [100, 0]);
+  const mainContentOpacity = useTransform(smoothProgress, [0.75, 0.85], [0, 1]);
 
   // Mock news data
   const newsItems = [
@@ -90,12 +90,7 @@ const LandingPage = () => {
             <div className="relative w-[800px] h-[600px]">
               {/* Faded Border Effect using mask-image */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/robot_hero.png"
-                alt="Fighting Robot"
-                className="w-full h-full object-contain"
-                style={{ maskImage: "radial-gradient(circle, black 60%, transparent 100%)" }}
-              />
+              <img src="/robot_hero.png" alt="Fighting Robot" className="w-full h-full object-contain" />
             </div>
           </motion.div>
 
@@ -114,12 +109,7 @@ const LandingPage = () => {
             <div className="relative w-[600px] h-[600px] flex items-center justify-center">
               {/* Faded Border Effect */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/nft_grid.png"
-                alt="NFT Collection"
-                className="w-full h-full object-contain"
-                style={{ maskImage: "radial-gradient(circle, black 60%, transparent 100%)" }}
-              />
+              <img src="/nft_grid.png" alt="NFT Collection" className="w-full h-full object-contain" />
             </div>
           </motion.div>
 
@@ -173,7 +163,7 @@ const LandingPage = () => {
       {/* Z-index 30 to ensure it sits above the sticky container */}
       <motion.div
         style={{ opacity: mainContentOpacity, y: mainContentY }}
-        className="relative z-30 bg-base-100 min-h-screen -mt-[100vh] pt-32 pb-20"
+        className="relative z-30 bg-transparent min-h-screen -mt-[100vh] pt-32 pb-20"
       >
         <div className="container mx-auto px-4">
           {/* Hero Slideshow */}

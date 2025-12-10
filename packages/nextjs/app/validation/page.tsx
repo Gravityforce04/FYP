@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Hash, Transaction, TransactionReceipt, decodeEventLog, formatEther } from "viem";
+import { Hash, decodeEventLog } from "viem";
 import { usePublicClient } from "wagmi";
 import { BlockchainScanner101 } from "~~/components/BlockchainScanner101";
-import { Address } from "~~/components/scaffold-eth";
+// import { Address } from "~~/components/scaffold-eth"; // Removed unused import
 import deployedContracts from "~~/contracts/deployedContracts";
 import scaffoldConfig from "~~/scaffold.config";
-import { decodeTransactionData } from "~~/utils/scaffold-eth";
+
+// import { decodeTransactionData } from "~~/utils/scaffold-eth"; // Removed unused import
 
 const CompetitionsPage = () => {
   const [transactionAddress, setTransactionAddress] = useState("");
@@ -18,9 +19,6 @@ const CompetitionsPage = () => {
   // Use the configured target network (Arbitrum Sepolia)
   const targetNetwork = scaffoldConfig.targetNetworks[0];
   const client = usePublicClient({ chainId: targetNetwork.id });
-
-  const [transaction, setTransaction] = useState<Transaction>();
-  const [receipt, setReceipt] = useState<TransactionReceipt>();
 
   const isValidTransactionHash = (hash: string) => {
     return /^0x[a-fA-F0-9]{64}$/.test(hash);
@@ -54,9 +52,9 @@ const CompetitionsPage = () => {
         throw new Error("Transaction not found");
       }
 
-      const transactionWithDecodedData = decodeTransactionData(tx);
-      setTransaction(transactionWithDecodedData);
-      setReceipt(receipt);
+      // const transactionWithDecodedData = decodeTransactionData(tx);
+      // setTransaction(transactionWithDecodedData); // Removed unused state
+      // setReceipt(receipt); // Removed unused state
 
       // Get RoboticsCompetition contract address for the current chain
       const chainId = targetNetwork.id;
@@ -169,228 +167,208 @@ const CompetitionsPage = () => {
     }
   };
 
-  const getArbiscanUrl = (address: string, type: "address" | "tx" = "address") => {
-    return `https://sepolia.arbiscan.io/${type}/${address}`;
-  };
-
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-4xl font-bold text-center mb-8">🏆 Competition Results Verification</h1>
+    <div className="container mx-auto px-4 max-w-[90%] pt-24 pb-20">
+      <div className="text-center mb-16">
+        <h1 className="text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
+          Match Validator
+        </h1>
+        <p className="text-xl text-base-content/70 max-w-2xl mx-auto">
+          Verify the integrity of any match on the Arbitrum network. Enter a transaction hash to decode and validate the
+          results.
+        </p>
+      </div>
 
-      <div className="max-w-4xl mx-auto">
+      {/* Top Section: Verify Transaction (Full Width) */}
+      <div className="w-full mx-auto mb-16">
         <div className="card bg-base-100 shadow-xl">
           <div className="card-body">
-            <div className="form-control">
+            <h2 className="card-title text-2xl mb-6">Verify Transaction</h2>
+            <div className="form-control w-full">
               <label className="label">
-                <span className="label-text text-lg font-semibold">Enter Transaction Address for verification:</span>
+                <span className="label-text font-bold">Transaction Hash</span>
               </label>
-              <div className="flex gap-4">
+              <div className="join">
                 <input
                   type="text"
-                  placeholder="Enter Transaction Hash (0x...)"
-                  className="input input-bordered flex-1"
+                  placeholder="0x..."
+                  className="input input-bordered join-item w-full font-mono text-sm"
                   value={transactionAddress}
                   onChange={e => setTransactionAddress(e.target.value)}
                 />
                 <button
-                  className={`btn btn-primary ${isVerifying ? "loading" : ""}`}
+                  className={`btn btn-primary join-item ${isVerifying ? "loading" : ""}`}
                   onClick={handleVerification}
-                  disabled={!transactionAddress || isVerifying}
+                  disabled={isVerifying}
                 >
-                  {isVerifying ? "Verifying..." : "✅ Verify Transaction"}
+                  {isVerifying ? "Verifying..." : "Verify"}
                 </button>
               </div>
-              {transactionAddress && !isValidTransactionHash(transactionAddress) && (
-                <label className="label">
-                  <span className="label-text-alt text-error">
-                    Invalid transaction hash format. Must be 66 characters starting with 0x
-                  </span>
-                </label>
-              )}
-              {error && (
-                <label className="label">
-                  <span className="label-text-alt text-error">{error}</span>
-                </label>
-              )}
+              <label className="label">
+                <span className="label-text-alt text-base-content/60">
+                  Paste the transaction hash from your wallet or block explorer.
+                </span>
+              </label>
             </div>
+
+            {error && (
+              <div className="alert alert-error shadow-lg mt-4">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="stroke-current flex-shrink-0 h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>{error}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Transaction Information */}
-        {transactionAddress && isValidTransactionHash(transactionAddress) && (
-          <div className="card bg-base-100 shadow-xl mt-6">
+        {/* Verification Result Component (Appears below input) */}
+        {verificationResult && (
+          <div className="card bg-base-100 shadow-xl border border-success/20 animate-fade-in-up mt-8">
             <div className="card-body">
-              <h2 className="card-title text-xl">🔗 Transaction Details</h2>
-              <div className="space-y-3">
-                <p>
-                  <strong>Transaction Hash:</strong>
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="bg-base-300 px-2 py-1 rounded text-sm break-all">{transactionAddress}</code>
-                  <a
-                    href={getArbiscanUrl(transactionAddress, "tx")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-outline btn-sm"
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center text-success">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-8 w-8"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
                   >
-                    🔗 View on Arbiscan
-                  </a>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
                 </div>
-                {transaction && (
-                  <div className="mt-4 space-y-2">
-                    <div>
-                      <strong>From (Sender):</strong> <Address address={transaction.from} />
-                    </div>
-                    <div>
-                      <strong>To (Receiver):</strong>{" "}
-                      {transaction.to ? <Address address={transaction.to} /> : <span>Contract Creation</span>}
-                    </div>
-                    <p>
-                      <strong>Value:</strong> {formatEther(transaction.value)} ETH
-                    </p>
-                    {receipt && (
-                      <>
-                        <p>
-                          <strong>Block Number:</strong> {receipt.blockNumber.toString()}
-                        </p>
-                        <p>
-                          <strong>Status:</strong>
-                          <span
-                            className={`badge ml-2 ${receipt.status === "success" ? "badge-success" : "badge-error"}`}
-                          >
-                            {receipt.status}
-                          </span>
-                        </p>
-                      </>
-                    )}
-                  </div>
-                )}
+                <div>
+                  <h3 className="text-2xl font-bold text-success">Match Verified</h3>
+                  <p className="text-base-content/70">This match has been cryptographically proven on-chain.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="p-4 bg-base-200 rounded-xl">
+                  <div className="text-sm opacity-60 mb-1">Match ID</div>
+                  <div className="text-xl font-mono font-bold">{verificationResult.matchId}</div>
+                </div>
+                <div className="p-4 bg-base-200 rounded-xl">
+                  <div className="text-sm opacity-60 mb-1">Winner</div>
+                  <div className="text-xl font-bold text-primary">{verificationResult.winner}</div>
+                </div>
+              </div>
+
+              <div className="divider">Raw Data</div>
+
+              <div className="mockup-code bg-base-300 text-base-content text-xs">
+                <pre data-prefix=">">
+                  <code>Timestamp: {verificationResult.timestamp}</code>
+                </pre>
+                <pre data-prefix=">">
+                  <code>Block: {verificationResult.blockNumber}</code>
+                </pre>
+                <pre data-prefix=">">
+                  <code>Gas Used: {verificationResult.gasUsed}</code>
+                </pre>
               </div>
             </div>
           </div>
         )}
+      </div>
 
-        {/* Verification Results */}
-        {verificationResult && (
-          <div className="card bg-base-100 shadow-xl mt-6">
-            <div className="card-body">
-              <h2 className="card-title text-2xl">
-                {verificationResult.verified ? "✅ Transaction Verified" : "❌ Transaction Failed"}
-              </h2>
+      {/* Bottom Section: Educational Content (Grid) */}
+      <div className="grid lg:grid-cols-2 gap-12 items-start">
+        {/* Left Column: Scanner */}
+        <div className="space-y-8">
+          <BlockchainScanner101 />
+        </div>
 
-              {verificationResult.isRoboticsContract ? (
-                // RoboticsCompetition contract interaction
-                <div className="grid md:grid-cols-2 gap-6 mt-4">
-                  {/* Match Details */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold text-primary">Competition Information</h3>
-                    <div className="space-y-2">
-                      {verificationResult.matchId !== undefined ? (
-                        <>
-                          <p>
-                            <strong>Status:</strong> <span className="badge badge-success">Verified</span>
-                          </p>
-                          <p>
-                            <strong>Match ID:</strong> {verificationResult.matchId}
-                          </p>
-                          <p>
-                            <strong>Timestamp:</strong>{" "}
-                            {new Date(Number(verificationResult.timestamp) * 1000).toLocaleString()}
-                          </p>
-                          <p>
-                            <strong>Match Data:</strong> {verificationResult.matchData}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-warning">{verificationResult.note}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Winner Information */}
-                  {verificationResult.winner && (
-                    <div className="space-y-3">
-                      <h3 className="text-lg font-semibold text-success">🏆 Winner</h3>
-                      <div className="space-y-2">
-                        <p>
-                          <strong>Address:</strong>
-                        </p>
-                        <Address address={verificationResult.winner} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                // General transaction verification
-                <div className="space-y-4 mt-4">
-                  <div className="alert alert-info">
-                    <span>This transaction is not a RoboticsCompetition match record.</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Participants List - Only for RoboticsCompetition contracts */}
-              {verificationResult.participants && verificationResult.participants.length > 0 && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-info mb-3">👥 Participants</h3>
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {verificationResult.participants.map((participant: string, index: number) => (
-                      <div key={index} className="card bg-base-200 p-3">
-                        <div className="flex items-center justify-between">
-                          <Address address={participant} />
-                          {participant === verificationResult.winner && (
-                            <span className="badge badge-success badge-sm">Winner</span>
-                          )}
-                        </div>
-                        <a
-                          href={getArbiscanUrl(participant)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-outline btn-xs mt-2"
-                        >
-                          🔗 Arbiscan
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Educational Scanner */}
-        <div className="mt-12 grid lg:grid-cols-2 gap-8">
+        {/* Right Column: How it Works & Links */}
+        <div className="space-y-8">
+          {/* How Validation Works - Floating Boxes */}
           <div>
-            <h2 className="text-2xl font-bold mb-6">Why Arbitrum?</h2>
-            <div className="space-y-4">
+            <h3 className="text-2xl font-bold mb-6">How Validation Works</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
               {[
                 {
-                  title: "L2 Scaling Solution",
-                  desc: "Arbitrum is a Layer 2 scaling solution for Ethereum, offering faster transactions and lower fees while maintaining Ethereum's security.",
+                  title: "Block Hashing",
+                  desc: "Unique fingerprint for every match.",
+                  icon: "🔒",
+                  color: "border-primary/20 bg-primary/5",
                 },
                 {
-                  title: "Optimistic Rollups",
-                  desc: "It uses Optimistic Rollups to bundle multiple transactions into a single proof, significantly reducing gas costs.",
+                  title: "Merkle Tree",
+                  desc: "Efficiently verifies integrity of all data.",
+                  icon: "🌳",
+                  color: "border-secondary/20 bg-secondary/5",
                 },
                 {
-                  title: "Arbiscan Explorer",
-                  desc: "Arbiscan is the block explorer for Arbitrum, allowing you to verify transactions, view contract code, and track token transfers transparently.",
+                  title: "Consensus",
+                  desc: "Network agreement on valid results.",
+                  icon: "🤝",
+                  color: "border-accent/20 bg-accent/5",
+                },
+                {
+                  title: "Immutable Ledger",
+                  desc: "Permanent, unchangeable history.",
+                  icon: "⛓️",
+                  color: "border-success/20 bg-success/5",
                 },
               ].map((item, index) => (
-                <div key={index} className="collapse collapse-arrow bg-base-200 hover:bg-base-300 transition-colors">
-                  <input type="radio" name="arbitrum-accordion" defaultChecked={index === 0} />
-                  <div className="collapse-title text-xl font-medium">{item.title}</div>
-                  <div className="collapse-content">
-                    <p>{item.desc}</p>
-                  </div>
+                <div
+                  key={index}
+                  className={`p-6 rounded-xl border ${item.color} shadow-lg hover:shadow-xl transition-shadow cursor-default`}
+                >
+                  <div className="text-3xl mb-3">{item.icon}</div>
+                  <h4 className="font-bold text-lg mb-1">{item.title}</h4>
+                  <p className="text-sm opacity-70">{item.desc}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div>
-            <BlockchainScanner101 />
+          {/* External Links */}
+          <div className="card bg-base-200 border-base-300 border">
+            <div className="card-body">
+              <h3 className="card-title text-lg">External Verification</h3>
+              <p className="text-sm opacity-70 mb-4">Cross-reference this transaction on official block explorers.</p>
+              <div className="flex gap-2">
+                <a
+                  href={`https://sepolia.arbiscan.io/tx/${transactionAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline btn-sm gap-2"
+                >
+                  Arbiscan
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
+                  </svg>
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </div>
