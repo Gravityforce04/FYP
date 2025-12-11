@@ -8,26 +8,26 @@ import { AnimatePresence, motion } from "framer-motion";
 const slides = [
   {
     id: 1,
-    title: "Global Autonomous Drone League 2025",
-    description: "Compete for a 50 ETH prize pool in the world's premier drone racing event.",
-    image: "https://images.unsplash.com/photo-1506947411487-a56738267384?q=80&w=2000&auto=format&fit=crop",
-    link: "/competition/drone-league-2025",
+    title: "BattleBots Destruct-A-Thon",
+    description: "Witness the destruction live in Las Vegas. The world's first daily robot-combat show.",
+    image: "https://battlebots.com/wp-content/uploads/2024/07/bb-logo-1.png",
+    link: "https://battlebots.com/event/battlebots-destruct-a-thon-saturday-12-13-2pm/",
     color: "from-primary/80 to-primary/20",
   },
   {
     id: 2,
-    title: "BattleBots: Heavyweight Championship",
-    description: "The titans of steel clash this weekend. Watch live or participate in the prediction markets.",
-    image: "https://images.unsplash.com/photo-1535378437327-b7128d611d4a?q=80&w=2000&auto=format&fit=crop",
-    link: "/competition/battlebots-heavyweight",
+    title: "Robot Combat Events",
+    description: "Find upcoming tournaments near you. Join the global community of builders.",
+    image: "http://robotcombatevents.com/assets/rce_logo-82a8a810f43b3b4a36275d3122c601e3.png",
+    link: "http://robotcombatevents.com/",
     color: "from-secondary/80 to-secondary/20",
   },
   {
     id: 3,
-    title: "AI Navigation Hackathon",
-    description: "Build the smartest pathfinding algorithm and win exclusive NFT parts.",
-    image: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?q=80&w=2000&auto=format&fit=crop",
-    link: "/hackathon/ai-nav",
+    title: "Builders Database",
+    description: "Register for events, track rankings, and manage your combat robot profile.",
+    image: "https://www.buildersdb.com/img/logo.png",
+    link: "https://www.buildersdb.com/events/1491",
     color: "from-accent/80 to-accent/20",
   },
 ];
@@ -59,7 +59,7 @@ export const HeroSlideshow = () => {
               src={slides[currentSlide].image}
               alt={slides[currentSlide].title}
               fill
-              className="object-cover"
+              className="object-contain p-12"
               priority
             />
           </div>

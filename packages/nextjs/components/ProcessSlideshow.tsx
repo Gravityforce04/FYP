@@ -12,25 +12,25 @@ export const ProcessSlideshow = () => {
       title: "Connect Wallet",
       desc: "Link your crypto wallet to start interacting with the blockchain. We support MetaMask, Rainbow, and more.",
       icon: <WalletIcon className="w-12 h-12" />,
-      image: "https://images.unsplash.com/photo-1622630998477-20aa696fa4a5?auto=format&fit=crop&q=80&w=800",
+      image: "/inspiration_2.png",
     },
     {
       title: "Enter Details",
       desc: "Provide your robot's specifications, history, and upload a high-quality image. This data becomes immutable.",
       icon: <DocumentTextIcon className="w-12 h-12" />,
-      image: "https://images.unsplash.com/photo-1555421689-491a97ff2040?auto=format&fit=crop&q=80&w=800",
+      image: "/inspiration_3.png",
     },
     {
       title: "Mint NFT",
       desc: "Confirm the transaction to mint your robot as a unique NFT on the Arbitrum network.",
       icon: <RocketLaunchIcon className="w-12 h-12" />,
-      image: "https://images.unsplash.com/photo-1620321023374-d1a68fddadb3?auto=format&fit=crop&q=80&w=800",
+      image: "/inspiration_1.png",
     },
     {
       title: "List for Sale",
       desc: "Set your price and list your robot on the marketplace for others to discover and purchase.",
       icon: <CurrencyDollarIcon className="w-12 h-12" />,
-      image: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&q=80&w=800",
+      image: "/inspiration_4.png",
     },
   ];
 

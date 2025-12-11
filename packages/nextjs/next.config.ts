@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
+      {
+        protocol: "https",
+        hostname: "battlebots.com",
+      },
+      {
+        protocol: "http",
+        hostname: "robotcombatevents.com",
+      },
+      {
+        protocol: "https",
+        hostname: "www.buildersdb.com",
+      },
     ],
   },
   webpack: config => {

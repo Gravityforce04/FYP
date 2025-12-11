@@ -55,25 +55,28 @@ const LandingPage = () => {
   // Mock news data
   const newsItems = [
     {
-      title: "Global Championship 2024 Announced",
-      date: "Oct 15, 2024",
-      category: "Competition",
-      image: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=800",
-      desc: "The biggest robotics event of the year is here. Teams from over 50 countries will compete for the ultimate prize.",
+      title: "BattleBots Destruct-A-Thon",
+      date: "Dec 13, 2024",
+      category: "Event",
+      image: "https://battlebots.com/wp-content/uploads/2024/07/bb-logo-1.png",
+      desc: "Witness the destruction live at the BattleBots Destruct-A-Thon. Experience the intensity of robot combat firsthand.",
+      link: "https://battlebots.com/event/battlebots-destruct-a-thon-saturday-12-13-2pm/",
     },
     {
-      title: "New 'Speedster' Class Robots Approved",
-      date: "Oct 12, 2024",
-      category: "Regulation",
-      image: "https://images.unsplash.com/photo-1535378437323-955586d7d65e?auto=format&fit=crop&q=80&w=800",
-      desc: "A new lightweight class has been added to the official roster, allowing for faster and more agile competitions.",
+      title: "Robot Combat Events",
+      date: "Ongoing",
+      category: "Community",
+      image: "http://robotcombatevents.com/assets/rce_logo-82a8a810f43b3b4a36275d3122c601e3.png",
+      desc: "Find upcoming robot combat events near you. Join the global community of builders and fighters.",
+      link: "http://robotcombatevents.com/",
     },
     {
-      title: "Community Governance Vote Live",
-      date: "Oct 10, 2024",
-      category: "Governance",
-      image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=800",
-      desc: "Token holders can now vote on the upcoming rule changes for the 2025 season. Have your say in the future of the sport.",
+      title: "Builders Database Events",
+      date: "Upcoming",
+      category: "Registration",
+      image: "https://www.buildersdb.com/img/logo.png",
+      desc: "Register for the latest robot combat tournaments and meetups. Track your rankings and event history.",
+      link: "https://www.buildersdb.com/events/1491",
     },
   ];
 
@@ -91,13 +94,9 @@ const LandingPage = () => {
             <div className="relative w-[800px] h-[600px]">
               {/* Faded Border Effect using mask-image */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://images.unsplash.com/photo-1485827404703-89b55fcc595e?auto=format&fit=crop&q=80&w=1000"
-                alt="Fighting Robot"
-                className="w-full h-full object-contain"
-              />
-              <div className="absolute bottom-0 left-0 right-0 text-center">
-                <p className="text-xl font-bold text-white bg-black/50 px-4 py-2 rounded-full inline-block">Robotics</p>
+              <img src="/robotics_hero.jpg" alt="Fighting Robot" className="w-full h-full object-contain" />
+              <div className="absolute top-10 left-0 right-0 text-center">
+                <p className="text-4xl font-black text-white tracking-widest drop-shadow-2xl uppercase">Robotics</p>
               </div>
             </div>
           </motion.div>
@@ -117,13 +116,9 @@ const LandingPage = () => {
             <div className="relative w-[600px] h-[600px] flex items-center justify-center">
               {/* Faded Border Effect */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&q=80&w=1000"
-                alt="NFT Collection"
-                className="w-full h-full object-contain"
-              />
-              <div className="absolute bottom-0 left-0 right-0 text-center">
-                <p className="text-xl font-bold text-white bg-black/50 px-4 py-2 rounded-full inline-block">NFT</p>
+              <img src="/blockchain_hero.jpg" alt="Blockchain Technology" className="w-full h-full object-contain" />
+              <div className="absolute top-10 left-0 right-0 text-center">
+                <p className="text-4xl font-black text-white tracking-widest drop-shadow-2xl uppercase">Blockchain</p>
               </div>
             </div>
           </motion.div>
@@ -229,37 +224,40 @@ const LandingPage = () => {
             <h2 className="text-5xl font-bold text-center mb-16">Latest News</h2>
             <div className="space-y-8">
               {newsItems.map((item, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  viewport={{ once: true }}
-                  className="flex flex-col md:flex-row gap-8 items-start group cursor-pointer border-b border-base-200 pb-8 last:border-0"
-                >
-                  {/* Image */}
-                  <div className="w-full md:w-64 h-40 rounded-2xl overflow-hidden shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
-                  </div>
+                <Link href={item.link} key={index} target="_blank" rel="noopener noreferrer" className="block">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    viewport={{ once: true }}
+                    className="flex flex-col md:flex-row gap-8 items-start group cursor-pointer border-b border-base-200 pb-8 last:border-0"
+                  >
+                    {/* Image */}
+                    <div className="w-full md:w-64 h-40 rounded-2xl overflow-hidden shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      />
+                    </div>
 
-                  {/* Content */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="badge badge-primary badge-outline">{item.category}</span>
-                      <span className="text-sm opacity-50">{item.date}</span>
+                    {/* Content */}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="badge badge-primary badge-outline">{item.category}</span>
+                        <span className="text-sm opacity-50">{item.date}</span>
+                      </div>
+                      <h3 className="text-2xl font-bold mb-3 group-hover:text-primary transition-colors">
+                        {item.title}
+                      </h3>
+                      <p className="text-base-content/70 leading-relaxed mb-4">{item.desc}</p>
+                      <div className="flex items-center text-primary font-medium group-hover:translate-x-2 transition-transform">
+                        Read Article <ArrowRightIcon className="w-4 h-4 ml-2" />
+                      </div>
                     </div>
-                    <h3 className="text-2xl font-bold mb-3 group-hover:text-primary transition-colors">{item.title}</h3>
-                    <p className="text-base-content/70 leading-relaxed mb-4">{item.desc}</p>
-                    <div className="flex items-center text-primary font-medium group-hover:translate-x-2 transition-transform">
-                      Read Article <ArrowRightIcon className="w-4 h-4 ml-2" />
-                    </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </Link>
               ))}
             </div>
           </div>
