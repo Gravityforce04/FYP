@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatEther, parseEther } from "viem";
-import { useAccount } from "wagmi";
-import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { useAccount, usePublicClient } from "wagmi";
+import {
+  useDeployedContractInfo,
+  useScaffoldReadContract,
+  useScaffoldWriteContract,
+  useTargetNetwork,
+} from "~~/hooks/scaffold-eth";
 import { notification } from "~~/utils/scaffold-eth";
 
 interface OwnedNFT {
@@ -91,6 +96,9 @@ export default function MyListedItems() {
     contractName: "Marketplace",
   });
 
+  const { targetNetwork } = useTargetNetwork();
+  const publicClient = usePublicClient({ chainId: targetNetwork.id });
+
   // Fallback function to load listed items from localStorage
   const loadFromLocalStorage = useCallback(() => {
     console.log("Loading listed items from localStorage as fallback...");
@@ -136,7 +144,7 @@ export default function MyListedItems() {
   }, [account]);
 
   const loadListedItems = useCallback(async () => {
-    if (!account || !itemCount) return;
+    if (!account || !itemCount || !publicClient || !nftContractInfo || !marketplaceContractInfo) return;
 
     try {
       setLoading(true);
@@ -157,22 +165,13 @@ export default function MyListedItems() {
           if (item.seller && item.seller.toLowerCase() === account.toLowerCase()) {
             // Verify that the NFT is actually in the marketplace contract
             try {
-              const { createPublicClient, http } = await import("viem");
-              const { localhost } = await import("viem/chains");
-
-              const publicClient = createPublicClient({
-                chain: localhost,
-                transport: http("http://127.0.0.1:8545"),
-              });
-
-              const contracts = await import("~~/contracts/deployedContracts");
-              const nftAddress = contracts.default[31337].NFT.address;
-              const marketplaceAddress = contracts.default[31337].Marketplace.address;
+              const nftAddress = nftContractInfo.address;
+              const marketplaceAddress = marketplaceContractInfo.address;
 
               // Check who actually owns the NFT
               const actualOwner = await publicClient.readContract({
-                address: nftAddress as `0x${string}`,
-                abi: contracts.default[31337].NFT.abi,
+                address: nftAddress,
+                abi: nftContractInfo.abi,
                 functionName: "ownerOf",
                 args: [BigInt(item.tokenId)],
               });
@@ -239,7 +238,7 @@ export default function MyListedItems() {
     } finally {
       setLoading(false);
     }
-  }, [account, itemCount, loadFromLocalStorage]);
+  }, [account, itemCount, loadFromLocalStorage, publicClient, nftContractInfo, marketplaceContractInfo]);
 
   const loadOwnedNFTs = () => {
     try {
@@ -350,23 +349,18 @@ export default function MyListedItems() {
 
   // Debug function to check NFT ownership
   const debugNFTOwnership = async (tokenId: number) => {
+    if (!publicClient || !nftContractInfo || !marketplaceContractInfo) {
+      console.log("❌ Debug: Contracts or client not ready");
+      return;
+    }
+
     try {
-      const { createPublicClient, http } = await import("viem");
-      const { localhost } = await import("viem/chains");
-
-      const publicClient = createPublicClient({
-        chain: localhost,
-        transport: http("http://127.0.0.1:8545"),
-      });
-
-      // Get contract addresses from deployed contracts
-      const contracts = await import("~~/contracts/deployedContracts");
-      const nftAddress = contracts.default[31337].NFT.address;
-      const marketplaceAddress = contracts.default[31337].Marketplace.address;
+      const nftAddress = nftContractInfo.address;
+      const marketplaceAddress = marketplaceContractInfo.address;
 
       const owner = await publicClient.readContract({
-        address: nftAddress as `0x${string}`,
-        abi: contracts.default[31337].NFT.abi,
+        address: nftAddress,
+        abi: nftContractInfo.abi,
         functionName: "ownerOf",
         args: [BigInt(tokenId)],
       });

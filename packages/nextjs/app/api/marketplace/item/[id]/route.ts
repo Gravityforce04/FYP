@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
-import { hardhat } from "viem/chains";
+import scaffoldConfig from "~~/scaffold.config";
+
+const targetNetwork = scaffoldConfig.targetNetworks[0];
+const rpcUrl = scaffoldConfig.rpcOverrides?.[targetNetwork.id] || targetNetwork.rpcUrls.default.http[0];
 
 // Create a public client for reading from the blockchain
 const publicClient = createPublicClient({
-  chain: hardhat,
-  transport: http("http://127.0.0.1:8545"),
+  chain: targetNetwork,
+  transport: http(rpcUrl),
 });
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,10 +18,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     // Read from deployed contracts
     const deployedContracts = await import("../../../../../contracts/deployedContracts");
-    const contracts = deployedContracts.default[31337]; // localhost chain ID
+    // @ts-ignore
+    const contracts = deployedContracts.default[targetNetwork.id];
 
-    if (!contracts?.Marketplace?.address || !contracts?.NFT?.address) {
-      return NextResponse.json({ error: "Contracts not deployed" }, { status: 500 });
+    if (!contracts || !contracts.Marketplace?.address || !contracts.NFT?.address) {
+      console.error(`Contracts not found for chain ID ${targetNetwork.id}`);
+      return NextResponse.json(
+        { error: `Contracts not deployed on chain ${targetNetwork.id} (${targetNetwork.name})` },
+        { status: 500 },
+      );
     }
 
     // Get item from marketplace contract

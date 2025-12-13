@@ -7,7 +7,7 @@ async function checkMatch() {
         transport: http("https://sepolia-rollup.arbitrum.io/rpc")
     });
 
-    const contractAddress = "0xe760AEf9b270Ae57C3efB684110bb854b56FF9E0";
+    const contractAddress = "0xD08A6C445c0eB6bb1fC83D192B12e15Eab65B727";
     const matchId = 1765386560n;
 
     const abi = [

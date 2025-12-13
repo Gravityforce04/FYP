@@ -16,9 +16,9 @@ The smart contracts are deployed on the Arbitrum Sepolia Testnet:
 
 | Contract Name | Address |
 |---|---|
-| **RoboticsCompetition** | `0xe760AEf9b270Ae57C3efB684110bb854b56FF9E0` |
-| **Marketplace** | `0x4caAd228483AECe7eEdf0e51A13b27cfE2783e46` |
-| **NFT** | `0x7782A464603247638C94A4376398Ce09AF5354D7` |
+| **RoboticsCompetition** | `0xD08A6C445c0eB6bb1fC83D192B12e15Eab65B727` |
+| **Marketplace** | `0x04d4d72c64121CA77296B098e17FBa56f90108aD` |
+| **NFT** | `0xd9015B10CC1b52Ed488453594784D6Cfa4dcf544` |
 
 ## 🛠 Tech Stack
 
