@@ -302,7 +302,6 @@ export default function MyListedItems() {
       await writeNFTContract({
         functionName: "approve",
         args: [marketplaceContractInfo.address, BigInt(nft.tokenId)],
-        gas: BigInt(200000), // Gas limit for approve
       });
       notification.success("NFT approved for marketplace transfer!");
 
@@ -314,7 +313,6 @@ export default function MyListedItems() {
       await writeMarketplaceContract({
         functionName: "listNFT",
         args: [nftContractInfo.address, BigInt(nft.tokenId), parseEther(price)],
-        gas: BigInt(300000), // Gas limit for listNFT
       });
 
       notification.success("NFT listed on marketplace successfully!");

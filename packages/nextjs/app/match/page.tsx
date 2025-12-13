@@ -184,7 +184,6 @@ export default function MatchPage() {
       const tx = await writeCompetition({
         functionName: "recordMatchResult",
         args: [BigInt(mockMatchId), winner as `0x${string}`, parts as `0x${string}`[], matchData],
-        gas: 500000n,
       });
 
       console.log("Mock match transaction response:", tx);

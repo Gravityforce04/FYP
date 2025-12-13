@@ -161,7 +161,6 @@ const CreateMint = () => {
       const tx = await writeNFTAsync({
         functionName: "mint",
         args: [tokenURI],
-        gas: 500000n,
       });
 
       if (tx) {
