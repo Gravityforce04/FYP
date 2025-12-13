@@ -96,7 +96,7 @@ const LandingPage = () => {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/robotics_hero.jpg" alt="Fighting Robot" className="w-full h-full object-contain" />
               <div className="absolute top-5 left-0 right-0 text-center z-10">
-                <p className="text-4xl font-black text-white tracking-widest drop-shadow-2xl uppercase">Robotics</p>
+                <p className="text-4xl font-black text-black tracking-widest drop-shadow-2xl uppercase">Robotics</p>
               </div>
             </div>
           </motion.div>
@@ -118,7 +118,7 @@ const LandingPage = () => {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/blockchain_hero.jpg" alt="Blockchain Technology" className="w-full h-full object-contain" />
               <div className="absolute top-5 left-0 right-0 text-center z-10">
-                <p className="text-4xl font-black text-white tracking-widest drop-shadow-2xl uppercase">Blockchain</p>
+                <p className="text-4xl font-black text-black tracking-widest drop-shadow-2xl uppercase">Blockchain</p>
               </div>
             </div>
           </motion.div>
