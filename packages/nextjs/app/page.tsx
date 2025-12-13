@@ -27,7 +27,7 @@ const LandingPage = () => {
   // 0.9 - 1.0: Main Content Reveal
 
   // 1. Fighting Robot
-  const robotScale = useTransform(smoothProgress, [0, 0.25, 0.5], [1.2, 0.8, 0.8]);
+  const robotScale = useTransform(smoothProgress, [0, 0.25, 0.5], [1.2, 1, 1]);
   const robotX = useTransform(smoothProgress, [0, 0.25, 0.5], ["0%", "-25%", "-25%"]);
   const robotOpacity = useTransform(smoothProgress, [0.5, 0.6], [1, 0]);
 
@@ -58,7 +58,7 @@ const LandingPage = () => {
       title: "BattleBots Destruct-A-Thon",
       date: "Dec 13, 2024",
       category: "Event",
-      image: "https://battlebots.com/wp-content/uploads/2024/07/bb-logo-1.png",
+      image: "/inspiration_1.png",
       desc: "Witness the destruction live at the BattleBots Destruct-A-Thon. Experience the intensity of robot combat firsthand.",
       link: "https://battlebots.com/event/battlebots-destruct-a-thon-saturday-12-13-2pm/",
     },
@@ -66,7 +66,7 @@ const LandingPage = () => {
       title: "Robot Combat Events",
       date: "Ongoing",
       category: "Community",
-      image: "http://robotcombatevents.com/assets/rce_logo-82a8a810f43b3b4a36275d3122c601e3.png",
+      image: "/inspiration_3.png",
       desc: "Find upcoming robot combat events near you. Join the global community of builders and fighters.",
       link: "http://robotcombatevents.com/",
     },
@@ -74,7 +74,7 @@ const LandingPage = () => {
       title: "Builders Database Events",
       date: "Upcoming",
       category: "Registration",
-      image: "https://www.buildersdb.com/img/logo.png",
+      image: "/inspiration_4.png",
       desc: "Register for the latest robot combat tournaments and meetups. Track your rankings and event history.",
       link: "https://www.buildersdb.com/events/1491",
     },
@@ -91,11 +91,11 @@ const LandingPage = () => {
             style={{ scale: robotScale, x: robotX, opacity: robotOpacity }}
             className="absolute w-full h-full flex items-center justify-center pointer-events-none"
           >
-            <div className="relative w-[800px] h-[600px]">
+            <div className="relative w-[600px] h-[600px] flex items-center justify-center">
               {/* Faded Border Effect using mask-image */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/robotics_hero.jpg" alt="Fighting Robot" className="w-full h-full object-contain" />
-              <div className="absolute top-10 left-0 right-0 text-center">
+              <div className="absolute top-5 left-0 right-0 text-center z-10">
                 <p className="text-4xl font-black text-white tracking-widest drop-shadow-2xl uppercase">Robotics</p>
               </div>
             </div>
@@ -117,7 +117,7 @@ const LandingPage = () => {
               {/* Faded Border Effect */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/blockchain_hero.jpg" alt="Blockchain Technology" className="w-full h-full object-contain" />
-              <div className="absolute top-10 left-0 right-0 text-center">
+              <div className="absolute top-5 left-0 right-0 text-center z-10">
                 <p className="text-4xl font-black text-white tracking-widest drop-shadow-2xl uppercase">Blockchain</p>
               </div>
             </div>
