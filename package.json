@@ -55,7 +55,7 @@
   },
   "packageManager": "yarn@3.2.3",
   "engines": {
-    "node": ">=20.18.3"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "ipfs-http-client": "^60.0.1"
